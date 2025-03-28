@@ -1,0 +1,14 @@
+﻿@model dynamic
+
+<h2>Debezium Configuration</h2>
+
+<form asp-action="UpdateConfig1" method="post">
+    @foreach (var property in Model.config)
+    {
+        <div>
+            <label>@property.Key</label>
+            <input name="@property.Key" value="@property.Value" />
+        </div>
+    }
+    <button type="submit">Save</button>
+</form>

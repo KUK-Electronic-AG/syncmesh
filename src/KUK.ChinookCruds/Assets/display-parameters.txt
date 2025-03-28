@@ -1,0 +1,4 @@
+﻿database.hostname
+database.port
+database.user
+database.password

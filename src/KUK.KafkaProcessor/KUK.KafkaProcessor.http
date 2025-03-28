@@ -1,0 +1,6 @@
+@KUK.KafkaProcessorApp_HostAddress = http://localhost:5197
+
+GET {{KUK.KafkaProcessorApp_HostAddress}}/status/
+Accept: application/json
+
+###

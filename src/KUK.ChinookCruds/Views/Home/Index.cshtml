@@ -1,0 +1,765 @@
+﻿@model KUK.ChinookCruds.ViewModels.DebeziumConfigsViewModel
+@{
+    ViewData["Title"] = "Home Page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Debezium Infrastructure Management</h1>
+</div>
+
+<section id="quick-actions" class="text-center">
+    <h2>Quick Actions</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Category</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Quick Actions</td>
+                <td>
+                    <button class="btn btn-danger mx-2" onclick="quickDelete()">Quick Delete</button>
+                    <button class="btn btn-success mx-2" onclick="quickStartup()">Quick Startup</button>
+                    <button class="btn btn-danger mx-2" onclick="deleteProcessorLogs()">Delete Processor Logs</button>
+                    <button class="btn btn-success mx-2" onclick="startProcessor()">Start Processor</button>
+                </td>
+            </tr>
+            <tr>
+                <td>Old Database</td>
+                <td>
+                    <button class="btn btn-primary mx-2" onclick="createOldCustomer()">Create Old Customer</button>
+                    <button class="btn btn-primary mx-2" onclick="createOldInvoice()">Create Old Invoice</button>
+                    <button class="btn btn-primary mx-2" onclick="addColumnToCustomerTable()">Add Column to Customer Table</button>
+                </td>
+            </tr>
+            <tr>
+                <td>Old Database - Complex</td>
+                <td>
+                    <button class="btn btn-primary mx-2" onclick="addNewCustomerUsingSubquery()">Add New Customer Using Subquery</button>
+                    <button class="btn btn-primary mx-2" onclick="addNewInvoiceUsingNestedQuery()">Add New Invoice Using Nested Query</button>
+                </td>
+            </tr>
+            <tr>
+                <td>New Database</td>
+                <td>
+                    <button class="btn btn-primary mx-2" onclick="createNewCustomer()">Create New Customer</button>
+                    <button class="btn btn-primary mx-2" onclick="createNewInvoice()">Create New Invoice</button>
+                    <button class="btn btn-primary mx-2" onclick="createNewAddress()">Create New Address</button>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    <p id="last-quick-delete">Last Quick Delete: Never</p>
+    <p id="last-quick-startup">Last Quick Startup: Never</p>
+</section>
+
+@if (Model.IsDockerMode)
+{
+    <section id="docker-management" class="text-center">
+        <h2>Manage Containers</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Container Name</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="container-status">
+                <tr>
+                    <td>kafka</td>
+                    <td id="status-kafka">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('kafka')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('kafka')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('kafka')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>schema-registry</td>
+                    <td id="status-schema-registry">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('schema-registry')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('schema-registry')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('schema-registry')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>control-center</td>
+                    <td id="status-control-center">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('control-center')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('control-center')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('control-center')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>mysql80</td>
+                    <td id="status-mysql80">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('mysql80')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('mysql80')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('mysql80')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>destinationpostgres</td>
+                    <td id="status-destinationpostgres">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('destinationpostgres')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('destinationpostgres')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('destinationpostgres')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>martenpostgres</td>
+                    <td id="status-martenpostgres">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('martenpostgres')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('martenpostgres')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('martenpostgres')">Remove</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>debezium</td>
+                    <td id="status-debezium">Loading...</td>
+                    <td>
+                        <button class="btn btn-success" onclick="startContainer('debezium')">Start</button>
+                        <button class="btn btn-warning" onclick="stopContainer('debezium')">Stop</button>
+                        <button class="btn btn-danger" onclick="removeContainer('debezium')">Remove</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </section>
+}
+else
+{
+    <!-- Hidden elements to satisfy the JS functions -->
+    <div style="display:none;">
+        <span id="status-kafka">N/A</span>
+        <span id="status-schema-registry">N/A</span>
+        <span id="status-connect">N/A</span>
+        <span id="status-control-center">N/A</span>
+        <span id="status-mysql80">N/A</span>
+        <span id="status-destinationpostgres">N/A</span>
+        <span id="status-martenpostgres">N/A</span>
+        <span id="status-debezium">N/A</span>
+    </div>
+    <p>We are not running in Docker mode so containers section is not displayed.</p>
+}
+
+<section id="database-status" class="text-center">
+    <h2>Database Status</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Database</th>
+                <th>Connection Status</th>
+                <th>Schema Exists</th>
+                <th>Schema Has Data</th>
+            </tr>
+        </thead>
+        <tbody id="db-status">
+            <tr>
+                <td>Old Database</td>
+                <td id="old-db-status">Loading...</td>
+                <td id="old-schema-exists">Loading...</td>
+                <td id="old-schema-has-data">Loading...</td>
+            </tr>
+            <tr>
+                <td>New Database</td>
+                <td id="new-db-status">Loading...</td>
+                <td id="new-schema-exists">Loading...</td>
+                <td id="new-schema-has-data">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<section id="schemas-management" class="text-center">
+    <h2>Initialize or Delete Schema, Tables and Data</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Database</th>
+                <th>Schema</th>
+                <th>Schema and Tables</th>
+                <th>Schema, Tables and Data</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Old Database</td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchema" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteSchema" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Schema, Tables and Data</button>
+                    </form>
+                </td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchemaAndTables" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema and Tables</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteTables" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Tables and Data</button>
+                    </form>
+                </td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchemaTablesAndData" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema, Tables and Data</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteData" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="old" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Data</button>
+                    </form>
+                </td>
+            </tr>
+            <tr>
+                <td>New Database</td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchema" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteSchema" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Schema, Tables and Data</button>
+                    </form>
+                </td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchemaAndTables" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema and Tables</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteTables" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Tables and Data</button>
+                    </form>
+                </td>
+                <td>
+                    <form asp-controller="Home" asp-action="InitializeSchemaTablesAndData" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-primary btn-block">Initialize Schema, Tables and Data</button>
+                    </form>
+                    <form asp-controller="Home" asp-action="DeleteData" method="post" class="form-inline ajax-form">
+                        <input type="hidden" name="database" value="new" />
+                        <button type="submit" class="btn btn-danger btn-block">Delete Data</button>
+                    </form>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+ </section>
+
+@if (Model.IsDockerMode)
+{
+    <section id="debezium-configuration" class="text-center">
+        <h2>Debezium Configuration</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Old Database</th>
+                    <th>New Database</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var parameter in Model.DisplayParameters)
+                {
+                    <tr>
+                        <td>@parameter</td>
+                        <td>
+                            @{
+                                var config1Dict = (IDictionary<string, object>)Model.Config1.config;
+                                var value1 = config1Dict.ContainsKey(parameter) ? config1Dict[parameter]?.ToString() : string.Empty;
+                            }
+                            <input name="Config1_@parameter" value="@value1" readonly />
+                        </td>
+                        <td>
+                            @{
+                                var config2Dict = (IDictionary<string, object>)Model.Config2.config;
+                                var value2 = config2Dict.ContainsKey(parameter) ? config2Dict[parameter]?.ToString() : string.Empty;
+                            }
+                            <input name="Config2_@parameter" value="@value2" readonly />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+else
+{
+    <p>We are not running in Docker mode so quick Debezium configuration is not shown - you may want to implement this feature.</p>
+}
+
+<section id="docker-processor" class="text-center">
+    <h2>Debezium Processor Application</h2>
+    <div class="text-center">
+        <button onclick="deleteProcessorLogs()">Delete Processor Logs</button>
+        <button onclick="startProcessor()">Start Processor</button>
+        <button onclick="stopProcessor()">Stop Processor</button>
+        <button onclick="terminateProcessor()">Terminate Processor</button>
+        <button onclick="getErrorCount()">Get Error Count</button>
+        <button onclick="clearProcessorLogs()">Clear Logs</button>
+
+        <div id="status" style="margin-top: 20px;"></div>
+        <div id="errorCount"></div>
+    </div>
+</section>
+
+<section id="connectors-management" class="text-center">
+    <h3>Connector Management</h3>
+    <table class="table table-connectors">
+        <thead>
+            <tr>
+                <th>Connector Name</th>
+                <th>Register</th>
+                <th>Delete</th>
+                <th>Restart</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Connector 1</td>
+                <td><button class="btn btn-primary" onclick="registerConnector('old-to-new-connector')">Register</button></td>
+                <td><button class="btn btn-danger" onclick="deleteConnector('old-to-new-connector')">Delete</button></td>
+                <td><button class="btn btn-warning" onclick="restartConnector('old-to-new-connector')">Restart</button></td>
+                <td id="status-old-to-new-connector">Loading...</td>
+            </tr>
+            <tr>
+                <td>Connector 2</td>
+                <td><button class="btn btn-primary" onclick="registerConnector('new-to-old-connector')">Register</button></td>
+                <td><button class="btn btn-danger" onclick="deleteConnector('new-to-old-connector')">Delete</button></td>
+                <td><button class="btn btn-warning" onclick="restartConnector('new-to-old-connector')">Restart</button></td>
+                <td id="status-new-to-old-connector">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+</section>
+
+<!-- Modal for confirmation -->
+<div class="modal fade" id="confirmationModal" tabindex="-1" role="dialog" aria-labelledby="confirmationModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to perform this action?
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmButton">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        async function performQuickAction(url, successMessage, errorMessage) {
+            try {
+                const response = await fetch(url, { method: 'POST' });
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    toastr.success(successMessage);
+                } else {
+                    toastr.error(result.message || errorMessage);
+                }
+
+                return result;
+            } catch (error) {
+                toastr.error(errorMessage);
+                console.error(error);
+                return null;
+            }
+        }
+
+        // REMARK: It can be improved by making sure that quick actions also show confirmation dialog
+
+        function updateQuickActionTimestamp(action, status) {
+            const now = new Date().toLocaleString();
+            const statusText = status ? 'SUCCESS' : 'ERROR';
+            if (action === 'quickDelete') {
+                document.getElementById('last-quick-delete').innerText = `Last Quick Delete: ${now} (${statusText})`;
+            } else if (action === 'quickStartup') {
+                document.getElementById('last-quick-startup').innerText = `Last Quick Startup: ${now} (${statusText})`;
+            }
+        }
+
+        async function quickDelete() {
+            document.getElementById('last-quick-delete').innerText = `Last Quick Delete: Executing...`;
+            const result = await performQuickAction('/Home/QuickDelete', 'Quick Delete performed successfully.', 'An error occurred while performing Quick Delete.');
+            updateQuickActionTimestamp('quickDelete', result ? true : false);
+        }
+
+        async function quickStartup() {
+            document.getElementById('last-quick-startup').innerText = `Last Quick Startup: Executing...`;
+            const result = await performQuickAction('/Home/QuickStartup', 'Quick Startup performed successfully.', 'An error occurred while performing Quick Startup.');
+            updateQuickActionTimestamp('quickStartup', result ? true : false);
+        }
+
+        function createOldCustomer() {
+            performQuickAction('/Home/CreateOldCustomer', 'Old Customer created successfully.', 'An error occurred while creating the old customer.');
+        }
+
+        function createOldInvoice() {
+            performQuickAction('/Home/CreateOldInvoice', 'Old Invoice created successfully.', 'An error occurred while creating the old invoice.');
+        }
+
+        function addColumnToCustomerTable() {
+            performQuickAction('/Home/AddColumnToCustomerTable', 'New column added to customer table successfully.', 'An error occurred while adding new column to customer table.');
+        }
+
+        function addNewCustomerUsingSubquery() {
+            performQuickAction('/Home/AddNewCustomerUsingSubquery', 'New customer added to old database with subquery successfully.', 'An error occurred while adding new customer to old database with subquery.');
+        }
+
+        function addNewInvoiceUsingNestedQuery() {
+            performQuickAction('/Home/AddNewInvoiceUsingNestedQuery', 'New invoice added to old database using nested query successfully.', 'An error occurred while adding new invoice to old database using nested query.');
+        }
+
+        function createNewCustomer() {
+            performQuickAction('/Home/CreateNewCustomer', 'New Customer created successfully.', 'An error occurred while creating the new customer.');
+        }
+
+        function createNewInvoice() {
+            performQuickAction('/Home/CreateNewInvoice', 'New Invoice created successfully.', 'An error occurred while creating the new invoice.');
+        }
+
+        function createNewAddress() {
+            performQuickAction('/Home/CreateNewAddress', 'New Address created successfully.', 'An error occurred while creating the new address.');
+        }
+
+        const ProcessorStatusEnum = {
+            IsNotRunning: 'IsNotRunning',
+            IsSpawned: 'IsSpawned',
+            IsRunningOutside: 'IsRunningOutside',
+            IsRunningTwice: 'IsRunningTwice'
+        };
+
+        function updateProcessorStatus(status) {
+            const statusDiv = document.getElementById('status');
+            switch (status) {
+                case ProcessorStatusEnum.IsSpawned:
+                case ProcessorStatusEnum.IsRunningOutside:
+                case ProcessorStatusEnum.IsRunningTwice:
+                    statusDiv.innerHTML = '<span style="color: green;">Processor is running</span>';
+                    break;
+                case ProcessorStatusEnum.IsNotRunning:
+                    statusDiv.innerHTML = '<span style="color: red;">Processor is not running</span>';
+                    break;
+                default:
+                    statusDiv.innerHTML = '<span style="color: gray;">Unknown status</span>';
+                    break;
+            }
+        }
+
+        function checkProcessorStatus() {
+            fetch('/Home/check-processor-status')
+                .then(response => response.json())
+                .then(data => updateProcessorStatus(data.status))
+                .catch(error => console.error('Error:', error));
+        }
+
+        function registerConnector(configPath) {
+            $.ajax({
+                type: 'POST',
+                url: '/Home/register-connector',
+                data: { configPath: configPath },
+                success: function (response) {
+                    toastr.success(response.message);
+                },
+                error: function (xhr, status, error) {
+                    toastr.error('An error occurred while registering the connector.');
+                }
+            });
+        }
+
+        function deleteConnector(connectorName) {
+            $.ajax({
+                type: 'POST',
+                url: '/Home/delete-connector',
+                data: { connectorName: connectorName },
+                success: function (response) {
+                    toastr.success(response.message);
+                },
+                error: function (xhr, status, error) {
+                    toastr.error('An error occurred while deleting the connector.');
+                }
+            });
+        }
+
+        function restartConnector(connectorName) {
+            $.ajax({
+                type: 'POST',
+                url: '/Home/restart-connector',
+                data: { connectorName: connectorName },
+                success: function (response) {
+                    toastr.success(response.message);
+                },
+                error: function (xhr, status, error) {
+                    toastr.error('An error occurred while restarting the connector.');
+                }
+            });
+        }
+
+        async function fetchConnectorStatus(connectorName) {
+            try {
+                const response = await fetch(`/Home/get-connector-status?connectorName=${connectorName}`);
+                const status = await response.json();
+                const statusElement = document.getElementById(`status-${connectorName}`);
+                if (statusElement) {
+                    statusElement.innerText = status.connector.state;
+                    statusElement.style.color = status.connector.state === 'RUNNING' ? 'green' : 'red';
+                }
+            } catch (error) {
+                const statusElement = document.getElementById(`status-${connectorName}`);
+                if (statusElement) {
+                    statusElement.innerText = 'ERROR';
+                    statusElement.style.color = 'red';
+                }
+            }
+        }
+
+        function getErrorCount() {
+            fetch('/Home/get-processor-error-count')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    var errorCountElement = document.getElementById('errorCount');
+                    if (errorCountElement) {
+                        if (data && typeof data.errorCount !== 'undefined') {
+                            errorCountElement.innerText = 'Error Count: ' + data.errorCount;
+                        } else {
+                            console.error('ErrorCount is undefined in the response data.');
+                        }
+                    } else {
+                        console.error('Element with id "errorCount" not found.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching error count:', error);
+                    toastr.error('An error occurred while fetching the error count.');
+                });
+        }
+
+        function confirmAction(action, name = null) {
+            actionToConfirm = action;
+            containerName = name;
+            $('#confirmationModal').modal('show');
+        }
+
+        $(document).ready(function () {
+            var formToSubmit;
+            var actionToConfirm;
+            var containerName;
+
+            $('#confirmationModal').on('click', '.btn-secondary', function () {
+                $('#confirmationModal').modal('hide');
+            });
+
+            // Handling forms
+            $('.ajax-form').on('submit', function (e) {
+                e.preventDefault();
+                formToSubmit = this;
+                $('#confirmationModal').modal('show');
+            });
+
+            // Handling action buttons
+            function handleAction(action, name) {
+                actionToConfirm = action;
+                containerName = name;
+                $('#confirmationModal').modal('show');
+            }
+
+            $('#confirmButton').on('click', function () {
+                $('#confirmationModal').modal('hide');
+
+                if (formToSubmit) {
+                    // Sending the form
+                    $.ajax({
+                        type: $(formToSubmit).attr('method'),
+                        url: $(formToSubmit).attr('action'),
+                        data: $(formToSubmit).serialize(),
+                        success: function (response) {
+                            console.log('Success response:', response);
+                            if (response && response.message) {
+                                if (response.success === false) {
+                                    toastr.error(response.message);
+                                } else {
+                                    toastr.success(response.message);
+                                }
+                            } else {
+                                toastr.success('Action completed successfully.');
+                            }
+                        },
+                        error: function (xhr, status, error) {
+                            toastr.error('An error occurred while processing your request.');
+                        }
+                    });
+                    formToSubmit = null;
+                } else {
+                    // Executing other actions
+                    var url = `/Home/${actionToConfirm}`;
+                    if (containerName) {
+                        url += `/${containerName}`;
+                    }
+                    $.ajax({
+                        type: 'POST',
+                        url: url,
+                        success: function (response) {
+                            if (response.message.startsWith("Error:")) {
+                                toastr.error(response.message);
+                            } else {
+                                toastr.success(response.message);
+                            }
+                        },
+                        error: function (xhr, status, error) {
+                            console.error('Error response:', error);
+                            toastr.error('An error occurred while processing your request. Type: ' + type + ', URL: ' + url);
+                        }
+                    });
+                }
+            });
+
+            window.startContainer = function (name) {
+                handleAction('start', name);
+            };
+
+            window.stopContainer = function (name) {
+                handleAction('stop', name);
+            };
+
+            window.removeContainer = function (name) {
+                handleAction('remove', name);
+            };
+
+            window.deleteProcessorLogs = function () {
+                handleAction('delete-processor-logs');
+            };
+
+            window.startProcessor = function () {
+                handleAction('start-processor');
+            };
+
+            window.stopProcessor = function () {
+                handleAction('stop-processor');
+            };
+
+            window.terminateProcessor = function () {
+                handleAction('terminate-processor');
+            };
+
+            window.clearProcessorLogs = function (name) {
+                handleAction('clear-processor-logs', name);
+            };
+
+            getErrorCount();
+            setInterval(getErrorCount, 10000);
+        });
+
+        async function fetchContainerStatus() {
+            const response = await fetch('/status');
+            const statuses = await response.json();
+
+            for (const [name, status] of Object.entries(statuses)) {
+                document.getElementById(`status-${name}`).innerText = status;
+            }
+        }
+
+        async function fetchDatabaseStatus() {
+            const response = await fetch('/dbstatus');
+            const statuses = await response.json();
+
+            document.getElementById('old-db-status').innerText = statuses.oldDbStatus;
+            document.getElementById('new-db-status').innerText = statuses.newDbStatus;
+            document.getElementById('old-schema-exists').innerText = statuses.oldSchemaExists;
+            document.getElementById('new-schema-exists').innerText = statuses.newSchemaExists;
+            document.getElementById('old-schema-has-data').innerText = statuses.oldSchemaHasData;
+            document.getElementById('new-schema-has-data').innerText = statuses.newSchemaHasData;
+        }
+
+        async function startContainer(containerName) {
+            await fetch(`/start/${containerName}`, { method: 'POST' });
+            fetchContainerStatus();
+        }
+
+        async function stopContainer(containerName) {
+            await fetch(`/stop/${containerName}`, { method: 'POST' });
+            fetchContainerStatus();
+        }
+
+        async function removeContainer(containerName) {
+            await fetch(`/remove/${containerName}`, { method: 'POST' });
+            fetchContainerStatus();
+        }
+
+        // Make checks periodic
+        setInterval(fetchContainerStatus, 1000);
+        setInterval(fetchDatabaseStatus, 1000);
+        setInterval(() => {
+            fetchConnectorStatus('old-to-new-connector');
+            fetchConnectorStatus('new-to-old-connector');
+        }, 1000);
+        setInterval(checkProcessorStatus, 1000);
+
+        // Set initial value of checks
+        fetchContainerStatus();
+        fetchDatabaseStatus();
+        fetchConnectorStatus('old-to-new-connector');
+        fetchConnectorStatus('new-to-old-connector');
+        checkProcessorStatus();
+    </script>
+}
+
+@section Styles {
+    <style>
+        .form-inline {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .btn-block {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+    body {
+        background-color: #f8f9fa; /* Light grey background */
+    }
+
+    section {
+        background-color: #ffffff; /* White background for the section */
+        border: 1px solid #dee2e6; /* Gray frame */
+        border-radius: 5px; /* Rounded corners */
+        padding: 20px; /* Inner spaces */
+        margin: 20px 0; /* Spaces between sections */
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Light shadow */
+    }
+
+    h2 {
+        margin-top: 0; /* Remove top margin for headers */
+    }
+    </style>
+}

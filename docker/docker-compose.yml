@@ -1,0 +1,140 @@
+services:
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://:9092,OUTSIDE://:9094,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9094
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 209715200
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_CONFLUENT_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "1"
+    ports:
+      - 9092:9092 # Mapping for INSIDE
+      - 9093:9093 # Mapping for CONTROLLER
+      - 9094:9094 # Mapping for OUTSIDE
+    networks:
+      - mynetwork
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:latest
+    container_name: schema-registry
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: PLAINTEXT://kafka:9092
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
+    depends_on:
+      - kafka
+    networks:
+      - mynetwork
+
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:latest
+    container_name: control-center
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'kafka:9092'
+      CONTROL_CENTER_CONNECT_CLUSTER: 'debezium:8084'
+      CONTROL_CENTER_SCHEMA_REGISTRY_URL: "http://schema-registry:8081"
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+    ports:
+      - "9021:9021"
+    depends_on:
+      - kafka
+      - schema-registry
+#      - connect
+    networks:
+      - mynetwork
+
+  mysql80:
+    image: mysql:8.0
+    container_name: mysql80
+    ports:
+      - 3308:3306
+    environment:
+      - MYSQL_ROOT_PASSWORD=${DebeziumWorker_Docker_OldDatabaseRootPassword}
+      - MYSQL_USER=${DebeziumWorker_Docker_OldDatabaseDataChangesUserName}
+      - MYSQL_PASSWORD=${DebeziumWorker_Docker_OldDatabaseDataChangesPassword}
+    volumes:
+      - ./mysql.cnf:/home/persistent-initialization-files/mysql.cnf
+      - ./mysqlinit.sql:/home/persistent-initialization-files/init.sql
+    command: >
+      bash -c "
+      docker-entrypoint.sh mysqld
+      "
+    env_file:
+      - .env
+    networks:
+      - mynetwork
+
+  destinationpostgres:
+    build:
+      context: .
+      dockerfile: Dockerfile-postgres
+    image: postgres:latest
+    container_name: destinationpostgres
+    ports:
+      - 5440:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=rootpassword
+      - POSTGRES_DB=db_chinook2
+      - POSTGRES_INITDB_ARGS="-c wal_level=logical" 
+      - POSTGRES_HOST_AUTH_METHOD=trust # use only on test, DON'T USE ON PRODUCTION
+    env_file:
+      - .env
+    networks:
+      - mynetwork
+    volumes:
+      - ./initPostgresUsers.sh:/docker-entrypoint-initdb.d/initPostgresUsers.sh
+      
+  martenpostgres:
+    image: postgres:latest
+    container_name: martenpostgres
+    ports:
+      - 5441:5432
+    environment:
+      - POSTGRES_USER=${DebeziumWorker_Docker_PostgresMartenRootUserName}
+      - POSTGRES_PASSWORD=${DebeziumWorker_Docker_PostgresMartenRootPassword}
+      - POSTGRES_DB=${DebeziumWorker_Docker_PostgresMartenDatabaseName}
+    env_file:
+      - .env
+    networks:
+      - mynetwork
+
+  debezium:
+    image: quay.io/debezium/connect:2.5
+    container_name: debezium
+    depends_on:
+      - kafka
+      - schema-registry
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: connect-debezium-group
+      CONFIG_STORAGE_TOPIC: debeziumconfigs
+      OFFSET_STORAGE_TOPIC: debeziumoffsets
+      STATUS_STORAGE_TOPIC: debeziumstatus
+      CONNECT_TOPIC_CREATION_ENABLE: true
+    ports:
+      - 8084:8083
+    networks:
+      - mynetwork
+      
+networks:
+  mynetwork:
+    driver: bridge
