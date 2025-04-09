@@ -1,8 +1,8 @@
-﻿using KUK.Common.Utilities;
+﻿using System.Text;
+using KUK.Common.Utilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-using System.Text;
 
 namespace KUK.Common.Services
 {
@@ -60,11 +60,11 @@ namespace KUK.Common.Services
                 var mode = _utilitiesService.GetOnlineOrDockerMode();
                 if (mode == ApplicationDestinationMode.Docker)
                 {
-                    if (configPath.StartsWith("old-to-new-connector"))
+                    if (configPath.StartsWith("old-to-new-connector") || configPath.Contains("debezium-connector-config-1"))
                     {
                         configPath = _firstConnectorFullPath;
                     }
-                    else if (configPath.StartsWith("new-to-old-connector"))
+                    else if (configPath.StartsWith("new-to-old-connector") || configPath.Contains("debezium-connector-config-2"))
                     {
                         configPath = _secondConnectorFullPath;
                     }
@@ -74,6 +74,7 @@ namespace KUK.Common.Services
                     }
 
                     var configJson = File.ReadAllText(configPath);
+                    configJson = AssignValuesFromConfigurationToConfigJson(configJson, configPath);
                     var content = new StringContent(configJson, Encoding.UTF8, "application/json");
                     var response = await _httpClient.PostAsync(_connectorPath + "/connectors", content);
                     response.EnsureSuccessStatusCode();
@@ -93,6 +94,36 @@ namespace KUK.Common.Services
             {
                 return new ConnectorRegistrationResult() { Success = false, Message = $"Error registering connector: {ex.Message}" };
             }
+        }
+
+        private string AssignValuesFromConfigurationToConfigJson(string configJson, string configPath)
+        {
+            string dbNameFromConfiguration = string.Empty;
+            string tableIncludeListFromConfiguration = string.Empty;
+
+            if (configPath.StartsWith("old-to-new-connector") || configPath.Contains("debezium-connector-config-1"))
+            {
+                dbNameFromConfiguration = _configuration["ConnectorDetails:DbNameOld"];
+                tableIncludeListFromConfiguration = _configuration["ConnectorDetails:TableIncludeListOld"];
+            }
+            else if (configPath.StartsWith("new-to-old-connector") || configPath.Contains("debezium-connector-config-2"))
+            {
+                dbNameFromConfiguration = _configuration["ConnectorDetails:DbNameNew"];
+                tableIncludeListFromConfiguration = _configuration["ConnectorDetails:TableIncludeListNew"];
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unknown configPath {configPath}");
+            }
+
+            if (string.IsNullOrEmpty(dbNameFromConfiguration) || string.IsNullOrEmpty(tableIncludeListFromConfiguration))
+            {
+                throw new InvalidOperationException($"Value of DbName or TableIncludeList is empty for {configPath}");
+            }
+            
+            return configJson
+                .Replace("{dbName}", dbNameFromConfiguration)
+                .Replace("{tableIncludeList}", tableIncludeListFromConfiguration);
         }
 
         public async Task<string> UnregisterConnectorAsync(string connectorName)

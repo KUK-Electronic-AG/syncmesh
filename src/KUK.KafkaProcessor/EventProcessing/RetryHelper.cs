@@ -1,4 +1,5 @@
 ﻿using KUK.KafkaProcessor.Utilities;
+using Microsoft.Extensions.Logging;
 using Polly;
 using Polly.Retry;
 
@@ -32,7 +33,7 @@ namespace KUK.KafkaProcessor.EventProcessing
                     {
                         // When Polly is doing retry, we set flag to true
                         _globalState.IsPollyRetrying = true;
-                        _logger.LogWarning($"Retry {retryCount} due to: {exception.Message}");
+                        _logger.LogWarning($"Retry {retryCount} due to: {exception.Message} with stack trace {exception.StackTrace}");
                     });
 
             try
@@ -59,7 +60,8 @@ namespace KUK.KafkaProcessor.EventProcessing
                     {
                         _globalState.IsPollyRetrying = true;
                         var exceptionMessage = outcome.Exception != null ? outcome.Exception.Message : "No exception";
-                        _logger.LogWarning($"Retry {retryCount} due to: {exceptionMessage}");
+                        var exceptionStackTrace = outcome.Exception != null ? outcome.Exception.StackTrace : "No stack trace";
+                        _logger.LogWarning($"Retry {retryCount} due to: {exceptionMessage} with stack trace {exceptionStackTrace}");
                     });
 
             try
@@ -85,7 +87,8 @@ namespace KUK.KafkaProcessor.EventProcessing
                     {
                         _globalState.IsPollyRetrying = true;
                         var exceptionMessage = outcome.Exception != null ? outcome.Exception.Message : "No exception";
-                        _logger.LogWarning($"Retry {retryCount} due to: {exceptionMessage}");
+                        var exceptionStackTrace = outcome.Exception != null ? outcome.Exception.StackTrace : "No stack trace";
+                        _logger.LogWarning($"Retry {retryCount} due to: {exceptionMessage} with stack trace {exceptionStackTrace}");
                     });
 
             try
@@ -107,7 +110,7 @@ namespace KUK.KafkaProcessor.EventProcessing
                     sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(RETRY_POWER, retryAttempt)),
                     onRetry: (exception, timeSpan, retryCount, context) =>
                     {
-                        _logger.LogWarning($"Retry {retryCount} due to: {exception.Message}");
+                        _logger.LogWarning($"Retry {retryCount} due to: {exception.Message} with stack trace {exception.StackTrace}");
                     });
 
             retryPolicy.Execute(operation);

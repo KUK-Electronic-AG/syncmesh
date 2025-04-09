@@ -1,0 +1,6 @@
+@KUK.ChinookSync_HostAddress = http://localhost:5124
+
+GET {{KUK.ChinookSync_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

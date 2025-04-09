@@ -1,10 +1,7 @@
-﻿using KUK.Common;
-using KUK.Common.Contexts;
-using KUK.Common.Services;
+﻿using KUK.Common.Services;
 using KUK.Common.Utilities;
 using KUK.ManagementServices.Services.Interfaces;
 using KUK.ManagementServices.Utilities;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -12,17 +9,10 @@ namespace KUK.ManagementServices.Services
 {
     public class QuickActionsService : IQuickActionsService
     {
-        private readonly Chinook1DataChangesContext _oldSchemaContext;
-        private readonly Chinook2Context _newSchemaContext;
-
         private readonly ILogger<QuickActionsService> _logger;
         private readonly IConnectorsRegistrationService _connectorsRegistrationService;
-        private readonly IDatabaseManagementService _databaseManagementService;
-        private readonly IDatabaseOperationsService _databaseOperationsService;
         private readonly IDockerService _dockerService;
-        private readonly IProcessorService _processorService;
         private readonly ISchemaInitializerService _schemaInitializerService;
-        private readonly AppSettingsConfig _appSettingsConfig;
         private readonly IContainersHealthCheckService _containersHealthCheckService;
         private readonly IUtilitiesService _utilitiesService;
         private readonly IExternalConnectionService _externalConnectionService;
@@ -30,32 +20,20 @@ namespace KUK.ManagementServices.Services
         private readonly IKafkaService _kafkaService;
 
         public QuickActionsService(
-            Chinook1DataChangesContext oldSchemaContext,
-            Chinook2Context newSchemaContext,
             ILogger<QuickActionsService> logger,
             IConnectorsRegistrationService connectorsRegistrationService,
-            IDatabaseManagementService databaseManagementService,
-            IDatabaseOperationsService databaseOperationsService,
             IDockerService dockerService,
-            IProcessorService processorService,
             ISchemaInitializerService schemaInitializerService,
-            AppSettingsConfig appSettingsConfig,
             IContainersHealthCheckService containersHealthCheckService,
             IUtilitiesService utilitiesService,
             IExternalConnectionService externalConnectionService,
             IConfiguration configuration,
             IKafkaService kafkaService)
         {
-            _oldSchemaContext = oldSchemaContext;
-            _newSchemaContext = newSchemaContext;
             _logger = logger;
             _connectorsRegistrationService = connectorsRegistrationService;
-            _databaseManagementService = databaseManagementService;
-            _databaseOperationsService = databaseOperationsService;
             _dockerService = dockerService;
-            _processorService = processorService;
             _schemaInitializerService = schemaInitializerService;
-            _appSettingsConfig = appSettingsConfig;
             _containersHealthCheckService = containersHealthCheckService;
             _utilitiesService = utilitiesService;
             _externalConnectionService = externalConnectionService;
@@ -186,7 +164,7 @@ namespace KUK.ManagementServices.Services
             }
             else if (mode == ApplicationDestinationMode.Online)
             {
-                await _schemaInitializerService.InitializeSchemaTablesAndData(WhichDatabaseEnum.OldDatabase);
+                await _schemaInitializerService.InitializeSchemaTablesAndData(WhichDatabaseEnum.OldDatabase, string.Empty);
             }
 
             return new ServiceActionStatus { Success = true, Message = $"Successfully performed {nameof(QuickStartup)}" };
@@ -195,100 +173,7 @@ namespace KUK.ManagementServices.Services
         // REMARK: We may consider using for quick create methods those methods that are in _databaseOperationsService
         // in order to avoid code duplication. However, then we may have issues with disposed context instance.
 
-        public async Task<ServiceActionStatus> QuickCreateOldCustomer()
-        {
-            var newCustomer = new Common.ModelsOldSchema.Customer
-            {
-                FirstName = "John (From old database - quick create)",
-                LastName = "Doe",
-                Address = "123 Main St",
-                City = "Anytown",
-                State = "Anystate",
-                Country = "Anycountry",
-                PostalCode = "12345",
-                Phone = "123-456-7890",
-                Email = "john.doe@example.com"
-            };
-
-            return await CreateEntityAsync(_oldSchemaContext, newCustomer, "Customer created successfully.");
-        }
-
-        public async Task<ServiceActionStatus> QuickCreateOldInvoice()
-        {
-            var newInvoice = new Common.ModelsOldSchema.Invoice
-            {
-                CustomerId = 1,
-                InvoiceDate = DateTime.UtcNow,
-                BillingAddress = "123 Main St",
-                BillingCity = "Anytown",
-                BillingState = "Anystate",
-                BillingCountry = "Anycountry",
-                BillingPostalCode = "12345",
-                Total = 100.00m,
-                TestValue3 = 123.456m,
-            };
-
-            return await CreateEntityAsync(_oldSchemaContext, newInvoice, "Old Invoice created successfully.");
-        }
-
-        public async Task<ServiceActionStatus> QuickCreateNewCustomer()
-        {
-            Common.ModelsNewSchema.Address address = _newSchemaContext.Addresses.FirstOrDefault();
-            if (address == null)
-            {
-                throw new InvalidOperationException("There are no addresses so we cannot quickly create new customer");
-            }
-
-            var newCustomer = new Common.ModelsNewSchema.Customer
-            {
-                FirstName = "Jane (from new database - quick create)",
-                LastName = "Doe",
-                AddressId = address.AddressId,
-                Phone = "987-654-3210",
-                Email = "jane.doe@example.com"
-            };
-
-            return await CreateEntityAsync(_newSchemaContext, newCustomer, "New Customer created successfully.");
-        }
-
-        public async Task<ServiceActionStatus> QuickCreateNewInvoice()
-        {
-            Common.ModelsNewSchema.Address address = _newSchemaContext.Addresses.FirstOrDefault();
-            if (address == null)
-            {
-                throw new InvalidOperationException("There are no addresses so we cannot quickly create new invoice");
-            }
-
-            Common.ModelsNewSchema.Customer customer = _newSchemaContext.Customers.FirstOrDefault();
-            if (customer == null)
-            {
-                throw new InvalidOperationException("There are no customers so we cannot quickly create new invoice");
-            }
-
-            var newInvoice = new Common.ModelsNewSchema.Invoice
-            {
-                CustomerId = customer.CustomerId,
-                InvoiceDate = DateTime.UtcNow,
-                BillingAddressId = address.AddressId,
-                Total = 200.00m
-            };
-
-            return await CreateEntityAsync(_newSchemaContext, newInvoice, "New Invoice created successfully.");
-        }
-
-        public async Task<ServiceActionStatus> QuickCreateNewAddress()
-        {
-            var newAddress = new Common.ModelsNewSchema.Address
-            {
-                Street = "456 Main St",
-                City = "Newtown",
-                State = "Newstate",
-                Country = "Newcountry",
-                PostalCode = "67890"
-            };
-
-            return await CreateEntityAsync(_newSchemaContext, newAddress, "New Address created successfully.");
-        }
+        
 
         private async Task DeleteTopicAsync(string topicKey)
         {
@@ -343,24 +228,6 @@ namespace KUK.ManagementServices.Services
             catch (Exception ex)
             {
                 return new ServiceActionStatus { Success = false, Message = $"Failed to remove {containerName}: {ex.Message}" };
-            }
-        }
-
-        private async Task<ServiceActionStatus> CreateEntityAsync<T>(DbContext context, T entity, string successMessage) where T : class
-        {
-            try
-            {
-                context.Set<T>().Add(entity);
-                await context.SaveChangesAsync();
-                return new ServiceActionStatus { Success = true, Message = successMessage };
-            }
-            catch (DbUpdateException dbEx)
-            {
-                return new ServiceActionStatus { Success = false, Message = $"Database update error: {dbEx.Message}" };
-            }
-            catch (Exception ex)
-            {
-                return new ServiceActionStatus { Success = false, Message = $"Unhandled exception: {ex.Message}" };
             }
         }
     }

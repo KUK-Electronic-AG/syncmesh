@@ -1,4 +1,5 @@
-﻿using KUK.ManagementServices.Utilities;
+﻿using KUK.Common.Utilities;
+using KUK.ManagementServices.Utilities;
 
 namespace KUK.ManagementServices.Services.Interfaces
 {
@@ -6,10 +7,6 @@ namespace KUK.ManagementServices.Services.Interfaces
     {
         Task<ServiceActionStatus> QuickDelete();
         Task<ServiceActionStatus> QuickStartup();
-        Task<ServiceActionStatus> QuickCreateOldCustomer();
-        Task<ServiceActionStatus> QuickCreateOldInvoice();
-        Task<ServiceActionStatus> QuickCreateNewCustomer();
-        Task<ServiceActionStatus> QuickCreateNewInvoice();
-        Task<ServiceActionStatus> QuickCreateNewAddress();
+
     }
 }

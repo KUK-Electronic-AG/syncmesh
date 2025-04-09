@@ -13,7 +13,6 @@ namespace KUK.KafkaProcessor.Services.Interfaces
         string ExtractEventSource(string payload);
         string ExtractOperation(string payload);
         string GetOpBasedOnEventType(string eventType);
-        Task<bool> CheckDependencyExistsAsync(string dependencyType, string aggregateId, string source);
         Task<EventMessage> ProcessMessageToEventMessageAsync(ConsumeResult<Ignore, string> consumeResult);
         Task<List<EventMessage>> EnsureDependenciesAsync(
             List<EventMessage> eventsToProcess,

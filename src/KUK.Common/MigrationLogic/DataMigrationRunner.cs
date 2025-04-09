@@ -1,32 +1,28 @@
 ﻿using KUK.Common.Contexts;
-using KUK.Common.DataMigrations;
 using KUK.Common.MigrationLogic.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace KUK.Common.MigrationLogic
 {
-    public class DataMigrationRunner : IDataMigrationRunner
+    public class DataMigrationRunner<TOld, TNew> : IDataMigrationRunner<TOld, TNew> where TNew : NewDbContext
     {
-        private readonly Chinook1DataChangesContext _oldContext;
-        private readonly Chinook2Context _newContext;
-        private readonly ILogger<DataMigrationRunner> _logger;
+        private readonly TOld _oldContext;
+        private readonly TNew _newContext;
+        private readonly ILogger<DataMigrationRunner<TOld, TNew>> _logger;
 
         public DataMigrationRunner(
-            Chinook1DataChangesContext oldContext,
-            Chinook2Context newContext,
-            ILogger<DataMigrationRunner> logger)
+            TOld oldContext,
+            TNew newContext,
+            ILogger<DataMigrationRunner<TOld, TNew>> logger)
         {
             _oldContext = oldContext;
             _newContext = newContext;
             _logger = logger;
         }
 
-        public async Task RunMigrations()
+        public async Task RunMigrations(List<IDataMigrationBase<TOld, TNew>> migrations)
         {
-            var migrations = new List<DataMigrationBase>
-            {
-                new MigrateInvoicesAndRelatedTables()
-            };
+            
 
             foreach (var migration in migrations)
             {

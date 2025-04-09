@@ -3,10 +3,8 @@
     public interface IProcessorService
     {
         Task<bool> DeleteProcessorLogs();
-        Task<bool> AreProcessorLogsFreeFromErrors();
+        Task<bool> AreProcessorLogsFreeFromErrors(string logsPath);
         Task<bool> StartProcessorAsync();
         Task<bool> KillProcessorAsync();
-        Task<bool> WaitForProcessorToFinishInitializatonAsync();
     }
-
 }

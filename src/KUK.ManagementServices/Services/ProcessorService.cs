@@ -1,7 +1,7 @@
-﻿using KUK.Common;
+﻿using System.Diagnostics;
+using KUK.Common;
 using KUK.ManagementServices.Services.Interfaces;
 using Microsoft.Extensions.Logging;
-using System.Diagnostics;
 
 namespace KUK.ManagementServices.Services
 {
@@ -50,19 +50,18 @@ namespace KUK.ManagementServices.Services
             return true;
         }
 
-        public async Task<bool> AreProcessorLogsFreeFromErrors()
+        public async Task<bool> AreProcessorLogsFreeFromErrors(string logsPath)
         {
             try
             {
-                var logsFilePath = _processorLogsFullPath;
-                if (string.IsNullOrWhiteSpace(logsFilePath))
+                if (string.IsNullOrWhiteSpace(logsPath))
                 {
                     throw new InvalidOperationException($"ProcessorLogsFullPath is empty, cannot read the logs");
                 }
 
                 List<string> errorLogs = new List<string>();
 
-                using (StreamReader reader = new StreamReader(logsFilePath))
+                using (StreamReader reader = new StreamReader(logsPath))
                 {
                     string line;
                     while ((line = reader.ReadLine()) != null)
@@ -136,40 +135,6 @@ namespace KUK.ManagementServices.Services
                 _logger.LogError($"Error killing processor: {ex.Message}");
                 return await Task.FromResult(false);
             }
-        }
-
-        public async Task<bool> WaitForProcessorToFinishInitializatonAsync()
-        {
-            var url = "https://localhost:7040/status/snapshotlastreceived";
-            var timeout = TimeSpan.FromSeconds(300);
-            var interval = TimeSpan.FromSeconds(1);
-            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-
-            while (stopwatch.Elapsed < timeout)
-            {
-                try
-                {
-                    var response = await _httpClient.GetAsync(url);
-                    response.EnsureSuccessStatusCode();
-
-                    var content = await response.Content.ReadAsStringAsync();
-                    if (bool.TryParse(content, out var isInitialized) && isInitialized)
-                    {
-                        _logger.LogInformation("Service is initialized.");
-                        return true;
-                    }
-                }
-                catch (HttpRequestException ex)
-                {
-                    _logger.LogError(ex, "Error checking status.");
-                    //throw new InvalidOperationException($"Cannot check if SnapshotLastReceived due to unhandled exception. Exception: {ex}");
-                }
-
-                await Task.Delay(interval);
-            }
-
-            _logger.LogError("Service did not initialize within the timeout period.");
-            throw new InvalidOperationException($"Cannot check if SnapshotLastReceived due to service not being initialized");
         }
 
         private bool ShouldSpawnNewProcess()

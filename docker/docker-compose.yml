@@ -56,7 +56,6 @@ services:
     depends_on:
       - kafka
       - schema-registry
-#      - connect
     networks:
       - mynetwork
 

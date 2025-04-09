@@ -1,47 +1,35 @@
-﻿using System.Collections;
-using System.Reflection;
-using Confluent.Kafka;
+﻿using Confluent.Kafka;
 using KUK.KafkaProcessor.EventProcessing;
 using KUK.KafkaProcessor.Services.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
-using NetTopologySuite.Index.HPRtree;
-using Newtonsoft.Json.Linq;
-using Org.BouncyCastle.Cms;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
-using System.Text.RegularExpressions;
-using System.Text;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace KUK.KafkaProcessor.Services
 {
     public class EventsSortingService : IEventsSortingService
     {
         private readonly ILogger<EventsSortingService> _logger;
-        private readonly IInvoiceService _invoiceService;
-        private readonly ICustomerService _customerService;
-        private readonly IAddressService _addressService;
         private readonly IMemoryCache _memoryCache;
         private readonly IConfiguration _configuration;
         private readonly MemoryCacheEntryOptions _cacheOptions;
+        private readonly IDomainDependencyService _domainDependencyService;
 
         public EventsSortingService(
             ILogger<EventsSortingService> logger,
-            IInvoiceService invoiceService,
-            ICustomerService customerService,
-            IAddressService addressService,
             IMemoryCache memoryCache,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IDomainDependencyService domainDependencyService)
         {
             _logger = logger;
-            _invoiceService = invoiceService;
-            _customerService = customerService;
-            _addressService = addressService;
             _memoryCache = memoryCache;
             _configuration = configuration;
             double memoryCacheExpirationInSeconds = Convert.ToDouble(configuration["InternalKafkaProcessorParameters:MemoryCacheExpirationInSeconds"]);
             _cacheOptions = new MemoryCacheEntryOptions()
                 .SetAbsoluteExpiration(TimeSpan.FromSeconds(memoryCacheExpirationInSeconds));
+            _domainDependencyService = domainDependencyService;
         }
 
         public List<EventMessage> SortEvents(List<EventMessage> events, List<List<PriorityDependency>> priorityLists, int bufferId)
@@ -283,76 +271,7 @@ namespace KUK.KafkaProcessor.Services
             }
         }
 
-        public async Task<bool> CheckDependencyExistsAsync(string dependencyType, string aggregateId, string source)
-        {
-            _logger.LogDebug($"CheckDependencyExistsAsync (dependencyType={dependencyType}, aggregateId={aggregateId}, source={source})");
-            string normalizedDependencyType = NormalizeDependencyType(dependencyType);
-
-            // We always return true for special case of address
-            if (aggregateId == "CREATE_NEW_ADDRESS")
-            {
-                return true;
-            }
-
-            switch (normalizedDependencyType)
-            {
-                case "INVOICE":
-                    switch (source.ToUpper())
-                    {
-                        case "OLD_TO_NEW":
-                            _logger.LogDebug($"Checking in old - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInOld = await _invoiceService.MappingExists(int.Parse(aggregateId));
-                            _logger.LogDebug($"Found in old: {foundInOld} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInOld;
-                        case "NEW_TO_OLD":
-                            _logger.LogDebug($"Checking in new - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInNew = await _invoiceService.MappingExists(Guid.Parse(aggregateId));
-                            _logger.LogDebug($"Found in new: {foundInNew} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInNew;
-                        default:
-                            _logger.LogWarning($"CheckDependencyExistsAsync - unknown source {source}");
-                            throw new InvalidOperationException($"Unknown source {source}");
-                    }
-                case "CUSTOMER":
-                    switch (source.ToUpper())
-                    {
-                        case "OLD_TO_NEW":
-                            _logger.LogDebug($"Checking in old - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInOld = await _customerService.MappingExists(int.Parse(aggregateId));
-                            _logger.LogDebug($"Found in old: {foundInOld} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInOld;
-                        case "NEW_TO_OLD":
-                            _logger.LogDebug($"Checking in new - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInNew = await _customerService.MappingExists(Guid.Parse(aggregateId));
-                            _logger.LogDebug($"Found in new: {foundInNew} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInNew;
-                        default:
-                            _logger.LogWarning($"CheckDependencyExistsAsync - unknown source {source}");
-                            throw new InvalidOperationException($"Unknown source {source}");
-                    }
-                case "ADDRESS":
-                    switch (source.ToUpper())
-                    {
-                        case "OLD_TO_NEW":
-                            _logger.LogDebug($"Checking in old - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInOld = await _addressService.MappingExists(int.Parse(aggregateId));
-                            _logger.LogDebug($"Found in old: {foundInOld} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInOld;
-                        case "NEW_TO_OLD":
-                            _logger.LogDebug($"Checking in new - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            var foundInNew = await _addressService.MappingExists(Guid.Parse(aggregateId));
-                            _logger.LogDebug($"Found in new: {foundInNew} - CheckDependencyExistsAsync (normalizedDependencyType={normalizedDependencyType}, aggregateId={aggregateId})");
-                            return foundInNew;
-                        default:
-                            _logger.LogWarning($"CheckDependencyExistsAsync - unknown source {source}");
-                            throw new InvalidOperationException($"Unknown source {source}");
-                    }
-                // REMARK: Here you add new cases for other types like "A", "B", "C" etc.
-                default:
-                    _logger.LogError($"CheckDependencyExistsAsync - default {normalizedDependencyType}");
-                    return false;
-            }
-        }
+        
 
         public PriorityDependency GetDependency(string eventType, List<List<PriorityDependency>> priorityLists)
         {
@@ -422,7 +341,7 @@ namespace KUK.KafkaProcessor.Services
                     if (IsEventTypeInGroup(group, eventType))
                     {
                         int priorityIndex = IndexOfEventType(group, eventType);
-                        // Jeśli event ma zależność (nie jest pierwszym w grupie)
+                        // If the event has a dependency (not the first in the group)
                         if (priorityIndex > 0)
                         {
                             await EnsureDependencyForEventAsync(evt, group, eventsToProcess, consumerBuffer,
@@ -476,37 +395,16 @@ namespace KUK.KafkaProcessor.Services
             {
                 _logger.LogWarning($"Expected dependency aggregate id is empty for idField={idField}");
             }
-            
+
             // We define operation (CREATED, UPDATED, DELETED) from the payload
             string operation = ExtractProperty(evt.Payload, "event_type", false);
-            bool isDeleteOperation = operation.Equals("DELETED", StringComparison.OrdinalIgnoreCase) || 
+            bool isDeleteOperation = operation.Equals("DELETED", StringComparison.OrdinalIgnoreCase) ||
                                       operation.Equals("d", StringComparison.OrdinalIgnoreCase);
-            
-            // If ID of dependency not found
-            if (string.IsNullOrEmpty(expectedDependencyAggregateId))
-            {
-                // For DELETE operations we simply skip checking the dependency
-                if (isDeleteOperation)
-                {
-                    _logger.LogDebug("EnsureDependencyForEventAsync: Missing dependency ID for {DependencyType} in DELETE event with aggregateId={AggregateId}. Skipping dependency check.",
-                        dependencyType, aggregateId);
-                    return;
-                }
-                // For UPDATE operation we check if ID of dependency is CREATE_NEW_ADDRESS
-                else if (operation.Equals("UPDATED", StringComparison.OrdinalIgnoreCase) && expectedDependencyAggregateId == "CREATE_NEW_ADDRESS")
-                {
-                    _logger.LogDebug("EnsureDependencyForEventAsync: Ignoring missing AddressId for UPDATE event with aggregateId={AggregateId}.", aggregateId);
-                    return; // We ignore lack of ID in case of update
-                }
-                // For other operations (CREATED) we log warning but we still process
-                else
-                {
-                    _logger.LogWarning("EnsureDependencyForEventAsync: Missing dependency ID for {DependencyType} in {Operation} event with aggregateId={AggregateId}. ExpectedDependencyAggregateId={ExpectedDependencyAggregateId}. This may indicate an issue with the data.",
-                        dependencyType, operation, aggregateId, expectedDependencyAggregateId);
-                    return;
-                }
-            }
-            
+
+            var shouldSkip = _domainDependencyService.ShouldSkipEnsuringDependency(
+                aggregateId, dependencyType, expectedDependencyAggregateId, operation, isDeleteOperation);
+            if (shouldSkip) return;
+
             string cacheKey = $"{dependencyType.ToUpperInvariant()}:{expectedDependencyAggregateId}";
             _logger.LogDebug("EnsureDependencyForEventAsync: For event with aggregateId='{AggregateId}', dependencyType='{DependencyType}', expectedDependencyAggregateId='{ExpectedDependencyAggregateId}', cacheKey='{CacheKey}'.",
                 aggregateId, dependencyType, expectedDependencyAggregateId, cacheKey);
@@ -523,7 +421,7 @@ namespace KUK.KafkaProcessor.Services
             }
 
             // Perform external dependency check.
-            bool dependencyExists = await CheckDependencyExistsAsync(dependencyType, expectedDependencyAggregateId, source);
+            bool dependencyExists = await _domainDependencyService.CheckDependencyExistsAsync(dependencyType, expectedDependencyAggregateId, source);
             _logger.LogDebug("EnsureDependencyForEventAsync: External dependency check for key '{CacheKey}' returned '{DependencyExists}'. EventType='{EventType}', AggregateId='{AggregateId}'", cacheKey, dependencyExists, eventType, aggregateId);
             if (dependencyExists)
             {
@@ -557,6 +455,8 @@ namespace KUK.KafkaProcessor.Services
                 _logger.LogWarning("EnsureDependencyForEventAsync: Dependency not satisfied for key '{CacheKey}' after waiting.", cacheKey);
             }
         }
+
+        
 
         /// <summary>
         /// Checks if the dependency (specified as dependencyType and expectedDependencyAggregateId)
@@ -632,7 +532,7 @@ namespace KUK.KafkaProcessor.Services
                 // New external check - if source is set
                 if (!string.IsNullOrWhiteSpace(source))
                 {
-                    bool externalCheck = await CheckDependencyExistsAsync(dependencyType, expectedDependencyAggregateId, source);
+                    bool externalCheck = await _domainDependencyService.CheckDependencyExistsAsync(dependencyType, expectedDependencyAggregateId, source);
                     _logger.LogDebug("WaitForDependencyEventAsync [Attempt {Attempt}]: External dependency check for key '{Key}' returned '{Result}'.",
                         attempt, $"{dependencyType.ToUpperInvariant()}:{expectedDependencyAggregateId}", externalCheck);
                     if (externalCheck)
@@ -704,17 +604,10 @@ namespace KUK.KafkaProcessor.Services
                 {
                     // Deserialize inner payload
                     dynamic innerJson = JsonConvert.DeserializeObject<dynamic>(innerPayloadStr);
-                    
-                    // Check if this event is of type CREATED for customer
-                    if (outerJson.aggregate_type?.ToString().Equals("CUSTOMER", StringComparison.OrdinalIgnoreCase) == true &&
-                        outerJson.event_type?.ToString().Equals("CREATED", StringComparison.OrdinalIgnoreCase) == true &&
-                        idFieldName.Equals("AddressId", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // For CREATED event for customer, we return special ID
-                        // that will be later processed by CustomerService
-                        return "CREATE_NEW_ADDRESS";
-                    }
-                    
+
+                    var aggregateIdToSkip = _domainDependencyService.GetAggregateIdToSkip(idFieldName, outerJson);
+                    if (aggregateIdToSkip != null) return aggregateIdToSkip;
+
                     // We try to read property with the name idFieldName
                     foreach (JProperty property in innerJson)
                     {
@@ -723,7 +616,7 @@ namespace KUK.KafkaProcessor.Services
                             return property.Value.ToString();
                         }
                     }
-                    
+
                     // If property not found, we return empty string
                     return string.Empty;
                 }
@@ -873,16 +766,6 @@ namespace KUK.KafkaProcessor.Services
             }
             // Otherwise, return the outer aggregate_id.
             return outerJson["aggregate_id"]?.ToString().Trim() ?? string.Empty;
-        }
-
-        private string NormalizeDependencyType(string dependencyType)
-        {
-            if (string.IsNullOrEmpty(dependencyType))
-            {
-                return string.Empty;
-            }
-            
-            return dependencyType.Trim().ToUpperInvariant();
         }
     }
 }

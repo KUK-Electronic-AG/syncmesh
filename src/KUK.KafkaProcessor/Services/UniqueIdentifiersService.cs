@@ -1,19 +1,20 @@
 ﻿using KUK.Common.Contexts;
-using KUK.Common.ModelsNewSchema.Outbox;
-using KUK.Common.ModelsOldSchema;
+using KUK.Common.Models.OldSchema;
+using KUK.Common.Models.Outbox;
 using KUK.KafkaProcessor.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 
 namespace KUK.KafkaProcessor.Services
 {
     public class UniqueIdentifiersService : IUniqueIdentifiersService
     {
-        private readonly Chinook1DataChangesContext _oldContext;
-        private readonly Chinook2Context _newContext;
+        private readonly IOldDataChangesContext _oldContext;
+        private readonly NewDbContext _newContext;
         private readonly ILogger<UniqueIdentifiersService> _logger;
 
         public UniqueIdentifiersService(
-            Chinook1DataChangesContext oldContext,
-            Chinook2Context newContext,
+            IOldDataChangesContext oldContext,
+            NewDbContext newContext,
             ILogger<UniqueIdentifiersService> logger)
         {
             _oldContext = oldContext;
@@ -28,13 +29,13 @@ namespace KUK.KafkaProcessor.Services
             return foundElementOld != null || foundElementNew != null;
         }
 
-        public async Task MarkIdentifierAsProcessedInOldDatabase(string identifier, Chinook1DataChangesContext oldContext)
+        public async Task MarkIdentifierAsProcessedInOldDatabase(string identifier, IOldDataChangesContext oldContext)
         {
             oldContext.ProcessedMessages.Add(new ProcessedMessagesOld { UniqueIdentifier = identifier });
             await oldContext.SaveChangesAsync();
         }
 
-        public async Task MarkIdentifierAsProcessedInNewDatabase(string identifier, Chinook2Context newContext)
+        public async Task MarkIdentifierAsProcessedInNewDatabase(string identifier, NewDbContext newContext)
         {
             newContext.ProcessedMessages.Add(new ProcessedMessagesNew { UniqueIdentifier = identifier });
             await newContext.SaveChangesAsync();

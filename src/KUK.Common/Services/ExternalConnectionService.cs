@@ -1,11 +1,11 @@
-﻿using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Npgsql;
-using System.Net.Http.Headers;
+﻿using System.Net.Http.Headers;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using Npgsql;
 
 namespace KUK.Common.Services
 {
@@ -84,7 +84,13 @@ namespace KUK.Common.Services
 
         public async Task CreatePublicationForAllTables()
         {
-            NpgsqlConnectionStringBuilder newDatabaseStringBuilder = _databaseDirectConnectionService.GetNewDatabaseConnection("db_chinook2");
+            var newDbName = _configuration["ConnectorDetails:DbNameNew"];
+            if (string.IsNullOrEmpty(newDbName))
+            {
+                throw new InvalidOperationException($"Value of ConnectorDetails:DbNameNew is not set in appsettings.");
+            }
+
+            NpgsqlConnectionStringBuilder newDatabaseStringBuilder = _databaseDirectConnectionService.GetNewDatabaseConnection(newDbName);
 
             using (var connection = new NpgsqlConnection(newDatabaseStringBuilder.ConnectionString))
             {
@@ -138,7 +144,7 @@ namespace KUK.Common.Services
             string connectorJsonContentWithPlaceholders = string.Empty;
             string jsonPayload = string.Empty;
 
-            if (configPath.StartsWith("old-to-new-connector"))
+            if (configPath.StartsWith("old-to-new-connector") || configPath.Contains("debezium-connector-config-1"))
             {
                 ThrowIfConfigurationValueIsMissing("ConnectorDetails:OldConnectorSuffix");
                 ThrowIfConfigurationValueIsMissing("Databases:OldDatabase:ServerName");
@@ -161,7 +167,7 @@ namespace KUK.Common.Services
                     .Replace("{oldDatabaseUserName}", oldDatabaseUserName)
                     .Replace("{oldDatabasePassword}", oldDatabasePassword);
             }
-            else if (configPath.StartsWith("new-to-old-connector"))
+            else if (configPath.StartsWith("new-to-old-connector") || configPath.Contains("debezium-connector-config-2"))
             {
                 ThrowIfConfigurationValueIsMissing("ConnectorDetails:NewConnectorSuffix");
                 ThrowIfConfigurationValueIsMissing("Databases:NewDatabase:ServerName");
@@ -538,7 +544,32 @@ namespace KUK.Common.Services
             using (StreamReader reader = new StreamReader(stream))
             {
                 string result = reader.ReadToEnd();
-                return result;
+
+                string dbNameFromConfiguration = string.Empty;
+                string tableIncludeListFromConfiguration = string.Empty;
+
+                switch (connector)
+                {
+                    case 1:
+                        dbNameFromConfiguration = _configuration["ConnectorDetails:DbNameOld"];
+                        tableIncludeListFromConfiguration = _configuration["ConnectorDetails:TableIncludeListOld"];
+                        break;
+                    case 2:
+                        dbNameFromConfiguration = _configuration["ConnectorDetails:DbNameNew"];
+                        tableIncludeListFromConfiguration = _configuration["ConnectorDetails:TableIncludeListNew"];
+                        break;
+                    default:
+                        throw new InvalidOperationException($"Invalid number of connector: {connector}");
+                }
+
+                if (string.IsNullOrEmpty(dbNameFromConfiguration) || string.IsNullOrEmpty(tableIncludeListFromConfiguration))
+                {
+                    throw new InvalidOperationException($"Value of DbName or TableIncludeList is empty for connector {connector}");
+                }
+
+                return result
+                    .Replace("{dbName}", dbNameFromConfiguration)
+                    .Replace("{tableIncludeList}", tableIncludeListFromConfiguration);
             }
         }
 

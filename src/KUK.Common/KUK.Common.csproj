@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Migrations\**" />
+    <EmbeddedResource Remove="Migrations\**" />
+    <None Remove="Migrations\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Remove="Assets\CreateTablesForOldDatabase.sql" />
     <None Remove="Assets\debezium-connector-config-1.json" />
     <None Remove="Assets\debezium-connector-config-2.json" />
@@ -50,13 +56,6 @@
 
 	<ItemGroup>
 	  <EmbeddedResource Include="Assets\TriggersForNewDatabase.sql" />
-	  <EmbeddedResource Include="Assets\CreateTablesForOldDatabase.sql">
-	    <CopyToOutputDirectory>Never</CopyToOutputDirectory>
-	  </EmbeddedResource>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Migrations\" />
 	</ItemGroup>
 	
 </Project>

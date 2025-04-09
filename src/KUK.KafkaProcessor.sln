@@ -3,19 +3,23 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.ChinookCruds", "KUK.ChinookCruds\KUK.ChinookCruds.csproj", "{76198EA9-6601-4DE4-B3E7-716A51BA4D55}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.ChinookCrudsWebApp", "KUK.ChinookCrudsWebApp\KUK.ChinookCrudsWebApp.csproj", "{76198EA9-6601-4DE4-B3E7-716A51BA4D55}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.Common", "KUK.Common\KUK.Common.csproj", "{8C82E11D-DDB4-4132-845D-6DA164B09D96}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.ManagementServices", "KUK.ManagementServices\KUK.ManagementServices.csproj", "{BA8370B6-3C6B-45EE-BE79-311A416FA0AE}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.IntegrationTests", "KUK.IntegrationTests\KUK.IntegrationTests.csproj", "{484B0D82-FB16-4E75-AE61-2A8A1A793F6B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.ChinookIntegrationTests", "KUK.ChinookIntegrationTests\KUK.ChinookIntegrationTests.csproj", "{484B0D82-FB16-4E75-AE61-2A8A1A793F6B}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.UnitTests", "KUK.UnitTests\KUK.UnitTests.csproj", "{3A8D7C3A-8DF1-4A01-B46B-D57CF32A56F2}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.ChinookUnitTests", "KUK.ChinookUnitTests\KUK.ChinookUnitTests.csproj", "{3A8D7C3A-8DF1-4A01-B46B-D57CF32A56F2}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "KUK.KafkaProcessor", "KUK.KafkaProcessor\KUK.KafkaProcessor.csproj", "{FCE29791-933E-4932-A2B3-7397A7D40C87}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KUK.EventsDebugger", "KUK.EventsDebugger\KUK.EventsDebugger.csproj", "{D2AF63D7-BCE2-4B6C-AA93-69BF4CECA8DF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KUK.ChinookSync", "KUK.ChinookSync\KUK.ChinookSync.csproj", "{45221F59-050C-41CF-8731-D1233EA20E9E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KUK.UnitTests", "KUK.UnitTests\KUK.UnitTests.csproj", "{BEEFA698-1BDB-476F-97C2-6CC309615C0A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,8 +55,19 @@ Global
 		{D2AF63D7-BCE2-4B6C-AA93-69BF4CECA8DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D2AF63D7-BCE2-4B6C-AA93-69BF4CECA8DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D2AF63D7-BCE2-4B6C-AA93-69BF4CECA8DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45221F59-050C-41CF-8731-D1233EA20E9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45221F59-050C-41CF-8731-D1233EA20E9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45221F59-050C-41CF-8731-D1233EA20E9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45221F59-050C-41CF-8731-D1233EA20E9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BEEFA698-1BDB-476F-97C2-6CC309615C0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEEFA698-1BDB-476F-97C2-6CC309615C0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEEFA698-1BDB-476F-97C2-6CC309615C0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEEFA698-1BDB-476F-97C2-6CC309615C0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12C5C516-5227-4A50-9048-FFA14BE7022F}
 	EndGlobalSection
 EndGlobal

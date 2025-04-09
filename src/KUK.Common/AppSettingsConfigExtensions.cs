@@ -1,8 +1,6 @@
-﻿using KUK.Common.Contexts;
-using Microsoft.EntityFrameworkCore;
+﻿using KUK.Common.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using MySql.Data.MySqlClient;
 
 namespace KUK.Common
 {
@@ -10,11 +8,13 @@ namespace KUK.Common
     {
         public static IServiceCollection AddAppSettingsConfig(this IServiceCollection services, IConfiguration configuration)
         {
+            var utilitiesService = new UtilitiesService();
+
             var appSettingsConfig = new AppSettingsConfig
             {
-                RootOldDatabaseConnectionString = GetConnectionString(configuration, "OldDatabase", useRoot: true),
-                OldDatabaseConnectionString = GetConnectionString(configuration, "OldDatabase"),
-                NewDatabaseConnectionString = GetConnectionString(configuration, "NewDatabase"),
+                RootOldDatabaseConnectionString = utilitiesService.GetConnectionString(configuration, "OldDatabase", useRoot: true),
+                OldDatabaseConnectionString = utilitiesService.GetConnectionString(configuration, "OldDatabase"),
+                NewDatabaseConnectionString = utilitiesService.GetConnectionString(configuration, "NewDatabase"),
                 DockerComposeDirectory = configuration["DockerComposeDirectory"] ?? string.Empty,
                 ProcessorExePath = AssignProcessorPath(configuration["ProcessorExePath"], "ProcessorExePath", ProcessorPathEnum.ProcessorExePath),
                 ProcessorLogsPath = AssignProcessorPath(configuration["ProcessorLogsPath"], "ProcessorLogsPath", ProcessorPathEnum.ProcessorLogsPath),
@@ -31,20 +31,6 @@ namespace KUK.Common
             };
 
             services.AddSingleton(appSettingsConfig);
-            return services;
-        }
-
-        public static IServiceCollection AddDatabaseContexts(this IServiceCollection services, AppSettingsConfig config)
-        {
-            services.AddDbContext<Chinook1DataChangesContext>(options => options.UseMySQL(config.OldDatabaseConnectionString));
-            services.AddScoped<IChinook1DataChangesContext>(provider => provider.GetService<Chinook1DataChangesContext>());
-
-            services.AddDbContext<Chinook1RootContext>(options => options.UseMySQL(config.RootOldDatabaseConnectionString));
-            services.AddScoped<IChinook1RootContext>(provider => provider.GetService<Chinook1RootContext>());
-
-            services.AddDbContext<Chinook2Context>(options => options.UseNpgsql(config.NewDatabaseConnectionString));
-            services.AddScoped<IChinook2Context>(provider => provider.GetService<Chinook2Context>());
-
             return services;
         }
 
@@ -109,65 +95,6 @@ namespace KUK.Common
                 return Path.Combine(baseDirectory.Parent.Parent.Parent.Parent.FullName, "KUK.KafkaProcessor", "bin", "Debug", "net8.0");
             }
             return path;
-        }
-
-        private static string GetConnectionString(IConfiguration configuration, string databaseKey, bool useRoot = false)
-        {
-            var connectionStringWithPlaceholders = configuration[$"Databases:{databaseKey}:ConnectionString"];
-            string password = string.Empty;
-            string environmentDestination = GetEnvironmentDestinationString();
-            if (!useRoot)
-            {
-                password = Environment.GetEnvironmentVariable($"DebeziumWorker_{environmentDestination}_{databaseKey}DataChangesPassword");
-                if (string.IsNullOrEmpty(password))
-                {
-                    throw new InvalidOperationException(
-                        $"Database DataChanges password is not set for {databaseKey}. " +
-                        $"Expected DebeziumWorker_{databaseKey}DataChangesPassword environment variable to be present.");
-                }
-            }
-            else
-            {
-                password = Environment.GetEnvironmentVariable($"DebeziumWorker_{environmentDestination}_{databaseKey}RootPassword");
-                if (string.IsNullOrEmpty(password))
-                {
-                    throw new InvalidOperationException(
-                        $"Database Root password is not set for {databaseKey}. " +
-                        $"Expected DebeziumWorker_{databaseKey}RootPassword environment variable to be present.");
-                }
-            }
-            var serverName = configuration[$"Databases:{databaseKey}:ServerName"];
-            var serverPort = configuration[$"Databases:{databaseKey}:ServerPort"];
-            var connectionString = connectionStringWithPlaceholders
-                .Replace("{serverName}", serverName)
-                .Replace("{serverPort}", serverPort)
-                .Replace("{password}", password);
-            if (useRoot)
-            {
-                // REMARK: Because we initialize MySQL80 in non-standard way (as per InitializeDatabaseAsync in QuickActionsService),
-                // we need to use root account for checking old database status.
-                connectionString = ModifyConnectionString(connectionString, configuration["Databases:RootAccountName"]);
-            }
-            return connectionString;
-        }
-
-        private static string ModifyConnectionString(string connectionString, string newUserId)
-        {
-            var builder = new MySqlConnectionStringBuilder(connectionString);
-            builder.UserID = newUserId;
-            return builder.ToString();
-        }
-
-        private static string GetEnvironmentDestinationString()
-        {
-            // REMARK: This is code duplication from UtilitiesService.GetEnvironmentDestinationString
-            var environmentVariableName = "DebeziumWorker_EnvironmentDestination";
-            string value = Environment.GetEnvironmentVariable(environmentVariableName);
-            if (string.IsNullOrWhiteSpace(value))
-            {
-                throw new InvalidOperationException($"Environment variable {environmentVariableName} is not set. Suggested values are Docker or Online.");
-            }
-            return value;
         }
     }
 }

@@ -1,7 +1,10 @@
-﻿using KUK.Common;
+﻿using System.Diagnostics;
+using System.Reflection;
+using KUK.Common;
 using KUK.Common.Contexts;
-using KUK.Common.DataMigrations;
+using KUK.Common.MigrationLogic.Interfaces;
 using KUK.Common.Services;
+using KUK.Common.Utilities;
 using KUK.ManagementServices.Services.Interfaces;
 using KUK.ManagementServices.Utilities;
 using Microsoft.EntityFrameworkCore;
@@ -9,53 +12,53 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 using Npgsql;
-using System.Diagnostics;
-using System.Reflection;
-using System.Text;
 
 namespace KUK.ManagementServices.Services
 {
     public class SchemaInitializerService : ISchemaInitializerService
     {
-        private readonly IChinook1DataChangesContext _chinook1DataChangesContext;
-        private readonly IChinook1RootContext _chinook1RootContext;
-        private readonly IChinook2Context _chinook2Context;
+        private readonly OldDbContext _oldDbDataChangesContext;
+        private readonly OldDbContext _oldDbRootContext;
+        private readonly NewDbContext _newDbContext;
         private readonly ILogger<SchemaInitializerService> _logger;
         private readonly AppSettingsConfig _appSettingsConfig;
         private readonly IDockerService _dockerService;
         private readonly IDatabaseManagementService _databaseManagementService;
-        private readonly IDatabaseDumpService _databaseDumpService;
         private readonly IUtilitiesService _utilitiesService;
-        private readonly IConfiguration _configuration;
         private readonly IDatabaseDirectConnectionService _databaseDirectConnectionService;
+        private readonly IConfiguration _configuration;
+        private readonly ICustomTriggersCreationService<OldDbContext, NewDbContext> _customTriggersCreationService;
+        private readonly ICustomSchemaInitializerService _customSchemaInitializerService;
 
         private const int WAITING_TIMEOUT = 60000; // 60 seconds
         private const int WAITING_DELAY = 500; // 0.5 seconds
 
         public SchemaInitializerService(
-            IChinook1DataChangesContext chinook1DataChangesContext,
-            IChinook1RootContext chinook1RootContext,
-            IChinook2Context chinook2Context,
+            OldDbContext oldDbDataChangesContext,
+            OldDbContext oldDbRootContext,
+            NewDbContext newDbContext,
             ILogger<SchemaInitializerService> logger,
             AppSettingsConfig appSettingsConfig,
             IDockerService dockerService,
             IDatabaseManagementService databaseManagementService,
-            IDatabaseDumpService databaseDumpService,
             IUtilitiesService utilitiesService,
+            IDatabaseDirectConnectionService databaseDirectConnectionService,
             IConfiguration configuration,
-            IDatabaseDirectConnectionService databaseDirectConnectionService)
+            ICustomTriggersCreationService<OldDbContext, NewDbContext> customTriggersCreationService,
+            ICustomSchemaInitializerService customSchemaInitializerService)
         {
-            _chinook1DataChangesContext = chinook1DataChangesContext;
-            _chinook1RootContext = chinook1RootContext;
-            _chinook2Context = chinook2Context;
+            _oldDbDataChangesContext = oldDbDataChangesContext;
+            _oldDbRootContext = oldDbRootContext;
+            _newDbContext = newDbContext;
             _logger = logger;
             _appSettingsConfig = appSettingsConfig;
             _dockerService = dockerService;
             _databaseManagementService = databaseManagementService;
-            _databaseDumpService = databaseDumpService;
             _utilitiesService = utilitiesService;
-            _configuration = configuration;
             _databaseDirectConnectionService = databaseDirectConnectionService;
+            _configuration = configuration;
+            _customTriggersCreationService = customTriggersCreationService;
+            _customSchemaInitializerService = customSchemaInitializerService;
         }
 
         public ServiceActionStatus InitializeSchema(WhichDatabaseEnum database, bool asRoot = false)
@@ -65,12 +68,12 @@ namespace KUK.ManagementServices.Services
                 switch (database)
                 {
                     case WhichDatabaseEnum.OldDatabase:
-                        CreateSchemaIfNotExists(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
+                        CreateSchemaIfNotExists(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
                         break;
                     case WhichDatabaseEnum.NewDatabase:
                         if (!asRoot)
                         {
-                            CreateSchemaIfNotExists(_chinook2Context);
+                            CreateSchemaIfNotExists(_newDbContext);
                         }
                         else
                         {
@@ -96,8 +99,8 @@ namespace KUK.ManagementServices.Services
                 switch (database)
                 {
                     case WhichDatabaseEnum.OldDatabase:
-                        CreateSchemaIfNotExists(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
-                        CreateEmptyTables(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
+                        CreateSchemaIfNotExists(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
+                        CreateEmptyTables(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
                         break;
                     case WhichDatabaseEnum.NewDatabase:
                         throw new InvalidOperationException("We should initialize new database from KafkaProcessor");
@@ -114,194 +117,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        public List<string> SetupTriggers()
-        {
-            var sqlCommands = new List<string>();
-
-            // Common payload mapping for Customer INSERT and UPDATE triggers.
-            var customerPayloadMapping = new Dictionary<string, string>
-            {
-                { "CustomerId", "CustomerId" },
-                { "FirstName", "FirstName" },
-                { "LastName", "LastName" },
-                { "Company", "Company" },
-                { "Address", "Address" },
-                { "City", "City" },
-                { "State", "State" },
-                { "Country", "Country" },
-                { "PostalCode", "PostalCode" },
-                { "Phone", "Phone" },
-                { "Fax", "Fax" },
-                { "Email", "Email" },
-                { "SupportRepId", "SupportRepId" }
-            };
-
-            // Trigger for Customer INSERT
-            string customerInsertTrigger = GenerateTrigger(
-                triggerName: "trg_customer_insert",
-                triggerEvent: "INSERT",
-                tableName: "Customer",
-                outboxTable: "customer_outbox",
-                aggregateColumn: "CustomerId",
-                aggregateType: "CUSTOMER",
-                eventType: "CREATED",
-                payloadMapping: customerPayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(customerInsertTrigger);
-
-            // Trigger for Customer UPDATE
-            string customerUpdateTrigger = GenerateTrigger(
-                triggerName: "trg_customer_update",
-                triggerEvent: "UPDATE",
-                tableName: "Customer",
-                outboxTable: "customer_outbox",
-                aggregateColumn: "CustomerId",
-                aggregateType: "CUSTOMER",
-                eventType: "UPDATED",
-                payloadMapping: customerPayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(customerUpdateTrigger);
-
-            // For DELETE, wystarczy tylko CustomerId – wyodrębniamy oddzielne mapping.
-            var customerDeleteMapping = new Dictionary<string, string>
-            {
-                { "CustomerId", "CustomerId" }
-            };
-            string customerDeleteTrigger = GenerateTrigger(
-                triggerName: "trg_customer_delete",
-                triggerEvent: "DELETE",
-                tableName: "Customer",
-                outboxTable: "customer_outbox",
-                aggregateColumn: "CustomerId",
-                aggregateType: "CUSTOMER",
-                eventType: "DELETED",
-                payloadMapping: customerDeleteMapping,
-                rowAlias: "OLD"
-            );
-            sqlCommands.Add(customerDeleteTrigger);
-
-            // Common payload mapping for Invoice INSERT and UPDATE triggers.
-            var invoicePayloadMapping = new Dictionary<string, string>
-            {
-                { "InvoiceId", "InvoiceId" },
-                { "CustomerId", "CustomerId" },
-                { "InvoiceDate", "InvoiceDate" },
-                { "BillingAddress", "BillingAddress" },
-                { "BillingCity", "BillingCity" },
-                { "BillingState", "BillingState" },
-                { "BillingCountry", "BillingCountry" },
-                { "BillingPostalCode", "BillingPostalCode" },
-                { "Total", "Total" }
-            };
-
-            // Trigger for Invoice INSERT
-            string invoiceInsertTrigger = GenerateTrigger(
-                triggerName: "trg_invoice_insert",
-                triggerEvent: "INSERT",
-                tableName: "Invoice",
-                outboxTable: "invoice_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICE",
-                eventType: "CREATED",
-                payloadMapping: invoicePayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(invoiceInsertTrigger);
-
-            // Trigger for Invoice UPDATE
-            string invoiceUpdateTrigger = GenerateTrigger(
-                triggerName: "trg_invoice_update",
-                triggerEvent: "UPDATE",
-                tableName: "Invoice",
-                outboxTable: "invoice_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICE",
-                eventType: "UPDATED",
-                payloadMapping: invoicePayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(invoiceUpdateTrigger);
-
-            // For Invoice DELETE, wystarczy tylko InvoiceId.
-            var invoiceDeleteMapping = new Dictionary<string, string>
-            {
-                { "InvoiceId", "InvoiceId" }
-            };
-            string invoiceDeleteTrigger = GenerateTrigger(
-                triggerName: "trg_invoice_delete",
-                triggerEvent: "DELETE",
-                tableName: "Invoice",
-                outboxTable: "invoice_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICE",
-                eventType: "DELETED",
-                payloadMapping: invoiceDeleteMapping,
-                rowAlias: "OLD"
-            );
-            sqlCommands.Add(invoiceDeleteTrigger);
-
-            // Common payload mapping for InvoiceLine INSERT and UPDATE triggers.
-            var invoiceLinePayloadMapping = new Dictionary<string, string>
-            {
-                { "InvoiceLineId", "InvoiceLineId" },
-                { "InvoiceId", "InvoiceId" },
-                { "TrackId", "TrackId" },
-                { "UnitPrice", "UnitPrice" },
-                { "Quantity", "Quantity" }
-            };
-
-            // Trigger for InvoiceLine INSERT
-            string invoiceLineInsertTrigger = GenerateTrigger(
-                triggerName: "trg_invoiceline_insert",
-                triggerEvent: "INSERT",
-                tableName: "InvoiceLine",
-                outboxTable: "invoiceline_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICELINE",
-                eventType: "CREATED",
-                payloadMapping: invoiceLinePayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(invoiceLineInsertTrigger);
-
-            // Trigger for InvoiceLine UPDATE
-            string invoiceLineUpdateTrigger = GenerateTrigger(
-                triggerName: "trg_invoiceline_update",
-                triggerEvent: "UPDATE",
-                tableName: "InvoiceLine",
-                outboxTable: "invoiceline_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICELINE",
-                eventType: "UPDATED",
-                payloadMapping: invoiceLinePayloadMapping,
-                rowAlias: "NEW"
-            );
-            sqlCommands.Add(invoiceLineUpdateTrigger);
-
-            // For InvoiceLine DELETE, wystarczy tylko InvoiceLineId.
-            var invoiceLineDeleteMapping = new Dictionary<string, string>
-            {
-                { "InvoiceLineId", "InvoiceLineId" }
-            };
-            string invoiceLineDeleteTrigger = GenerateTrigger(
-                triggerName: "trg_invoiceline_delete",
-                triggerEvent: "DELETE",
-                tableName: "InvoiceLine",
-                outboxTable: "invoiceline_outbox",
-                aggregateColumn: "InvoiceId",
-                aggregateType: "INVOICELINE",
-                eventType: "DELETED",
-                payloadMapping: invoiceLineDeleteMapping,
-                rowAlias: "OLD"
-            );
-            sqlCommands.Add(invoiceLineDeleteTrigger);
-
-            return sqlCommands;
-        }
-
-        public async Task<ServiceActionStatus> InitializeSchemaTablesAndData(WhichDatabaseEnum database, string userName = "")
+        public async Task<ServiceActionStatus> InitializeSchemaTablesAndData(WhichDatabaseEnum database, string userName)
         {
             try
             {
@@ -338,10 +154,10 @@ namespace KUK.ManagementServices.Services
                 switch (database)
                 {
                     case WhichDatabaseEnum.OldDatabase:
-                        DropSchema(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
+                        DropSchema(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
                         break;
                     case WhichDatabaseEnum.NewDatabase:
-                        DropSchema(_chinook2Context);
+                        DropSchema(_newDbContext);
                         break;
                     default:
                         return new ServiceActionStatus { Success = false, Message = $"Unknown database {database}" };
@@ -369,10 +185,10 @@ namespace KUK.ManagementServices.Services
                 switch (database)
                 {
                     case WhichDatabaseEnum.OldDatabase:
-                        DropTables(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
+                        DropTables(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
                         break;
                     case WhichDatabaseEnum.NewDatabase:
-                        DropTables(_chinook2Context);
+                        DropTables(_newDbContext);
                         break;
                     default:
                         return new ServiceActionStatus { Success = false, Message = $"Unknown database {database}" };
@@ -400,10 +216,10 @@ namespace KUK.ManagementServices.Services
                 switch (database)
                 {
                     case WhichDatabaseEnum.OldDatabase:
-                        ClearData(asRoot ? _chinook1RootContext : _chinook1DataChangesContext);
+                        ClearData(asRoot ? _oldDbRootContext : _oldDbDataChangesContext);
                         break;
                     case WhichDatabaseEnum.NewDatabase:
-                        ClearData(_chinook2Context);
+                        ClearData(_newDbContext);
                         break;
                     default:
                         return new ServiceActionStatus { Success = false, Message = $"Unknown database {database}" };
@@ -425,10 +241,10 @@ namespace KUK.ManagementServices.Services
             {
                 var mode = _utilitiesService.GetOnlineOrDockerMode();
 
-                // Executing SQL script with Chinook database intialization
-                CreateSchemaIfNotExists(_chinook1RootContext);
-                ImportDatabaseFromSqlFile(_chinook1RootContext);
-                AddTestValueColumn(_chinook1RootContext, 3);
+                // Executing SQL script with database intialization
+                CreateSchemaIfNotExists(_oldDbRootContext);
+                ImportDatabaseFromSqlFile(_oldDbRootContext);
+                _customSchemaInitializerService.AddTestValueColumn(_oldDbRootContext, 3);
                 await WaitForDatabaseConnectionSchemaAndDataAsync(_appSettingsConfig, database);
 
                 if (mode == ApplicationDestinationMode.Docker) // Continue with setup for Docker
@@ -458,14 +274,21 @@ namespace KUK.ManagementServices.Services
                 }
                 else if (mode == ApplicationDestinationMode.Online)
                 {
-                    var assembly = Assembly.Load("KUK.Common");
-                    var resourceName = "KUK.Common.Assets.CreateTablesForOldDatabase.sql";
+                    var assemblyName = _configuration["OnlineMode:AssemblyForCreateTablesForOldDatabase"];
+                    var resourceName = _configuration["OnlineMode:ResourceNameForCreateTablesForOldDatabase"];
+
+                    if (string.IsNullOrEmpty(assemblyName) || string.IsNullOrEmpty(resourceName))
+                    {
+                        throw new InvalidOperationException($"Either AssemblyForCreateTablesForOldDatabase or ResourceNameForCreateTablesForOldDatabase is empty.");
+                    }
+
+                    var assembly = Assembly.Load(assemblyName);
 
                     using (Stream stream = assembly.GetManifestResourceStream(resourceName))
                     using (StreamReader reader = new StreamReader(stream))
                     {
                         string result = reader.ReadToEnd();
-                        List<string> triggers = SetupTriggers();
+                        List<string> triggers = _customTriggersCreationService.SetupTriggers();
 
                         MySqlConnectionStringBuilder connectionStringBuilder = _databaseDirectConnectionService.GetOldDatabaseConnection();
                         using (var connection = new MySqlConnection(connectionStringBuilder.ConnectionString))
@@ -502,49 +325,7 @@ namespace KUK.ManagementServices.Services
             return new ServiceActionStatus { Success = true, Message = $"{database} initialized successfully" };
         }
 
-        private string GenerateTrigger(
-            string triggerName,
-            string triggerEvent,
-            string tableName,
-            string outboxTable,
-            string aggregateColumn,
-            string aggregateType,
-            string eventType,
-            Dictionary<string, string> payloadMapping,
-            string rowAlias)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine($"CREATE TRIGGER {triggerName}");
-            sb.AppendLine($"AFTER {triggerEvent}");
-            sb.AppendLine($"ON {tableName} FOR EACH ROW");
-            sb.AppendLine("BEGIN");
-            sb.AppendLine("    DECLARE unique_identifier VARCHAR(36);");
-            sb.AppendLine("    SET unique_identifier = UUID();");
-            sb.AppendLine();
-
-            // Build the JSON_OBJECT expression dynamically based on payloadMapping.
-            var jsonParts = new List<string>();
-            foreach (var kvp in payloadMapping)
-            {
-                // Each pair produces something like: 'CustomerId', NEW.CustomerId
-                jsonParts.Add($"'{kvp.Key}', {rowAlias}.{kvp.Value}");
-            }
-            var jsonObjectExpression = $"JSON_OBJECT({string.Join(", ", jsonParts)})";
-
-            sb.AppendLine($"    INSERT INTO {outboxTable} (aggregate_id, aggregate_type, event_type, payload, unique_identifier)");
-            sb.AppendLine("    VALUES(");
-            sb.AppendLine($"        {rowAlias}.{aggregateColumn},");
-            sb.AppendLine($"        '{aggregateType}',");
-            sb.AppendLine($"        '{eventType}',");
-            sb.AppendLine($"        {jsonObjectExpression},");
-            sb.AppendLine("        unique_identifier");
-            sb.AppendLine("    );");
-            sb.AppendLine("END");
-
-            return sb.ToString();
-        }
-
-        private void CreateSchemaIfNotExists(IChinook1Context context)
+        private void CreateSchemaIfNotExists(IOldRootContext context)
         {
             // REMARK: Here we check if it CANNOT connect because connection string contains schema name
             // so if it cannot connect (and database is available) it means we need to create schema
@@ -554,7 +335,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void CreateSchemaIfNotExists(IChinook2Context context)
+        private void CreateSchemaIfNotExists(NewDbContext context)
         {
             // REMARK: Here we check if it CANNOT connect because connection string contains schema name
             // so if it cannot connect (and database is available) it means we need to create schema
@@ -564,73 +345,48 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void CreateEmptyTables(IChinook1Context chinook1Context)
+        private void CreateEmptyTables(OldDbContext oldDbContext)
         {
             throw new NotImplementedException();
         }
 
-        private void CreateEmptyTables(IChinook2Context chinook2Context)
+        private void CreateEmptyTables(NewDbContext newDbContext)
         {
             throw new NotImplementedException();
         }
 
-        private void ImportDatabaseFromSqlFile(IChinook1Context context)
+        private void ImportDatabaseFromSqlFile(OldDbContext context)
         {
-            var assembly = Assembly.GetExecutingAssembly();
-            var resourceName = "KUK.ManagementServices.Assets.Chinook_MySql_AutoIncrementPKs.sql";
+            var assemblyName = _configuration["InitialCreationOfOldDatabase:AssemblyName"];
+            var fileName = _configuration["InitialCreationOfOldDatabase:FileName"];
+            var collationQuery = _configuration["InitialCreationOfOldDatabase:CollationQuery"];
 
-            using (Stream stream = assembly.GetManifestResourceStream(resourceName))
+            if (string.IsNullOrEmpty(assemblyName) || string.IsNullOrEmpty(fileName) || string.IsNullOrEmpty(collationQuery))
+            {
+                throw new InvalidOperationException($"You need to correctly provide InitialCreationOfOldDatabase section in appsettings");
+            }
+
+            var assembly = Assembly.Load(assemblyName);
+
+            using (Stream stream = assembly.GetManifestResourceStream(fileName))
             using (StreamReader reader = new StreamReader(stream))
             {
                 var sql = reader.ReadToEnd();
-                ((DbContext)context).Database.ExecuteSqlRaw("SET NAMES latin1 COLLATE latin1_swedish_ci;");
+                ((DbContext)context).Database.ExecuteSqlRaw(collationQuery);
                 ((DbContext)context).Database.ExecuteSqlRaw(sql);
             }
         }
 
-        private void AddTestValueColumn(IChinook1Context context, int precision)
-        {
-            // Always add precision as a suffix to the column name
-            string columnName = $"TestValue{precision}";
-
-            // Add TestValue column with specified precision
-            var sql = $"ALTER TABLE db_chinook1.Invoice ADD COLUMN {columnName} DECIMAL(12,{precision});";
-            ((DbContext)context).Database.ExecuteSqlRaw(sql);
-
-            // Update all the records to add random TestValue with specified precision
-            var updateSql = $@"
-                UPDATE db_chinook1.Invoice
-                SET {columnName} = ROUND(RAND() * POWER(10, {precision}), {precision});";
-                    ((DbContext)context).Database.ExecuteSqlRaw(updateSql);
-        }
-
-        private void AddTestDateTimeColumn(IChinook1Context chinook1Context, int precision, int suffix)
-        {
-            // Always add suffix as a part of the column name
-            string columnName = $"TestDate{suffix}";
-
-            // Add TestDate column with specified precision
-            var sql = $"ALTER TABLE db_chinook1.Invoice ADD COLUMN {columnName} DATETIME({precision});";
-            ((DbContext)chinook1Context).Database.ExecuteSqlRaw(sql);
-
-            // Update all the records to add random TestDate with specified precision
-            var updateSql = $@"
-                UPDATE db_chinook1.Invoice
-                SET {columnName} = DATE_ADD('1970-01-01', INTERVAL RAND() * 1000000000 SECOND);";
-            ((DbContext)chinook1Context).Database.ExecuteSqlRaw(updateSql);
-        }
-
-        private void TransformDataFromOldContextToNewContext(IChinook1Context chinook1Context, IChinook2Context chinook2Context)
-        {
-            var migrateInvoicesAndRelatedTables = new MigrateInvoicesAndRelatedTables();
-            migrateInvoicesAndRelatedTables.Up((Chinook1DataChangesContext)chinook1Context, (Chinook2Context)chinook2Context);
-        }
-
-        private void DropSchema(IChinook1Context context) // REMARK: We can merge these DropSchema methods for both contexts
+        private void DropSchema(OldDbContext context) // REMARK: We can merge these DropSchema methods for both contexts
         {
             MySqlConnectionStringBuilder connectionStringBuilder = _databaseDirectConnectionService.GetOldDatabaseConnection(true);
 
-            var schemaName = "db_chinook1";
+            var schemaName = _configuration["Databases:SchemaNameOld"];
+            if (string.IsNullOrEmpty(schemaName))
+            {
+                throw new InvalidOperationException($"Value of Databases:SchemaNameOld is missing in appsettings");
+            }
+
             using (var connection = new MySqlConnection(connectionStringBuilder.ConnectionString))
             {
                 connection.Open();
@@ -642,7 +398,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void DropSchema(IChinook2Context context)
+        private void DropSchema(NewDbContext context)
         {
             NpgsqlConnectionStringBuilder connectionStringBuilder = _databaseDirectConnectionService.GetNewDatabaseConnection();
 
@@ -672,7 +428,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void DropTables(IChinook1Context context)
+        private void DropTables(OldDbContext context)
         {
             var tables = ((DbContext)context).Model.GetEntityTypes()
                 .Select(t => t.GetTableName())
@@ -685,7 +441,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void DropTables(IChinook2Context context)
+        private void DropTables(NewDbContext context)
         {
             var dbContext = (DbContext)context;
 
@@ -696,7 +452,7 @@ namespace KUK.ManagementServices.Services
         }
 
 
-        private void ClearData(IChinook1Context context)
+        private void ClearData(OldDbContext context)
         {
             var tables = ((DbContext)context).Model.GetEntityTypes()
                 .Select(t => t.GetTableName())
@@ -709,7 +465,7 @@ namespace KUK.ManagementServices.Services
             }
         }
 
-        private void ClearData(IChinook2Context context)
+        private void ClearData(NewDbContext context)
         {
             var dbContext = (DbContext)context;
 
@@ -719,14 +475,14 @@ namespace KUK.ManagementServices.Services
             dbContext.Database.ExecuteSqlRaw("DELETE FROM Addresses");
         }
 
-        private IChinook1Context CreateNewRootContextForOldDatabase()
+        private OldDbContext CreateNewRootContextForOldDatabase()
         {
             var connectionString = _appSettingsConfig.RootOldDatabaseConnectionString;
 
-            var optionsBuilder = new DbContextOptionsBuilder<Chinook1Context>();
+            var optionsBuilder = new DbContextOptionsBuilder<OldDbContext>();
             optionsBuilder.UseMySQL(connectionString);
 
-            return new Chinook1Context(optionsBuilder.Options);
+            return new OldDbContext(optionsBuilder.Options);
         }
 
         private async Task<bool> WaitForDatabaseConnectionAsync(AppSettingsConfig appSettingsConfig, WhichDatabaseEnum whichDatabaseEnum, string userName = "")

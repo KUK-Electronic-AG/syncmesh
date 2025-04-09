@@ -1,10 +1,11 @@
-﻿using KUK.Common;
+﻿using System.Net.Sockets;
+using KUK.Common;
 using KUK.ManagementServices.Services.Interfaces;
 using KUK.ManagementServices.Utilities;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using MySql.Data.MySqlClient;
 using Npgsql;
-using System.Net.Sockets;
 
 namespace KUK.ManagementServices.Services
 {
@@ -12,18 +13,32 @@ namespace KUK.ManagementServices.Services
     {
         private readonly AppSettingsConfig _config;
         private readonly ILogger<DatabaseManagementService> _logger;
+        private readonly IConfiguration _configuration;
 
-        private const string OLD_SCHEMA_NAME = "db_chinook1";
-        private const string NEW_SCHEMA_NAME = "public";
-        private const string OLD_SCHEMA_EXEMPLARY_TABLE = "Customer";
-        private const string NEW_SCHEMA_EXEMPLARY_TABLE = "Customers";
+        private readonly string oldSchemaName;
+        private readonly string newSchemaName;
+        private readonly string oldSchemaExemplaryTable;
+        private readonly string newSchemaExemplaryTable;
 
         public DatabaseManagementService(
             AppSettingsConfig config,
-            ILogger<DatabaseManagementService> logger)
+            ILogger<DatabaseManagementService> logger,
+            IConfiguration configuration)
         {
             _config = config;
             _logger = logger;
+            _configuration = configuration;
+
+            oldSchemaName = _configuration["Databases:SchemaNameOld"];
+            newSchemaName = _configuration["Databases:SchemaNameNew"];
+            oldSchemaExemplaryTable = _configuration["Databases:OldSchemaExemplaryTable"];
+            newSchemaExemplaryTable = _configuration["Databases:NewSchemaExemplaryTable"];
+
+            if (string.IsNullOrEmpty(oldSchemaName) || string.IsNullOrEmpty(newSchemaName) ||
+                string.IsNullOrEmpty(oldSchemaExemplaryTable) || string.IsNullOrEmpty(newSchemaExemplaryTable))
+            {
+                throw new InvalidOperationException($"Missing values in Databases (SchemaName[Old|New] or [Old|New]SchemaExemplaryTable) in appsettings");
+            }
         }
 
         public async Task<DbStatuses> CheckDatabasesStatus(DatabasesBasicConfiguration dbConfig)
@@ -39,12 +54,12 @@ namespace KUK.ManagementServices.Services
             if (oldDbAccessible)
             {
                 oldSchemaExists =
-                    await CheckSchemaExistsAsync(dbConfig.RootOldDbConnectionString, OLD_SCHEMA_NAME, WhichDatabaseEnum.OldDatabase)
+                    await CheckSchemaExistsAsync(dbConfig.RootOldDbConnectionString, oldSchemaName, WhichDatabaseEnum.OldDatabase)
                     ? CheckStatusEnum.Exists : CheckStatusEnum.NotExists;
                 if (oldSchemaExists == CheckStatusEnum.Exists)
                 {
                     oldSchemaHasData =
-                        await CheckSchemaHasDataAsync(dbConfig.RootOldDbConnectionString, OLD_SCHEMA_NAME, OLD_SCHEMA_EXEMPLARY_TABLE, WhichDatabaseEnum.OldDatabase)
+                        await CheckSchemaHasDataAsync(dbConfig.RootOldDbConnectionString, oldSchemaName, oldSchemaExemplaryTable, WhichDatabaseEnum.OldDatabase)
                         ? CheckStatusEnum.Exists : CheckStatusEnum.NotExists;
                 }
             }
@@ -52,12 +67,12 @@ namespace KUK.ManagementServices.Services
             if (newDbAccessible)
             {
                 newSchemaExists = 
-                    await CheckSchemaExistsAsync(dbConfig.NewDbConnectionString, NEW_SCHEMA_NAME, WhichDatabaseEnum.NewDatabase)
+                    await CheckSchemaExistsAsync(dbConfig.NewDbConnectionString, newSchemaName, WhichDatabaseEnum.NewDatabase)
                     ? CheckStatusEnum.Exists : CheckStatusEnum.NotExists;
                 if (newSchemaExists == CheckStatusEnum.Exists)
                 {
                     newSchemaHasData = 
-                        await CheckSchemaHasDataAsync(dbConfig.NewDbConnectionString, NEW_SCHEMA_NAME, NEW_SCHEMA_EXEMPLARY_TABLE, WhichDatabaseEnum.NewDatabase)
+                        await CheckSchemaHasDataAsync(dbConfig.NewDbConnectionString, newSchemaName, newSchemaExemplaryTable, WhichDatabaseEnum.NewDatabase)
                         ? CheckStatusEnum.Exists : CheckStatusEnum.NotExists;
                 }
             }

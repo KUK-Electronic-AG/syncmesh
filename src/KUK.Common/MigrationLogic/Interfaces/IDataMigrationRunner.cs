@@ -1,7 +1,7 @@
 ﻿namespace KUK.Common.MigrationLogic.Interfaces
 {
-    public interface IDataMigrationRunner
+    public interface IDataMigrationRunner<TOld, TNew>
     {
-        public Task RunMigrations();
+        public Task RunMigrations(List<IDataMigrationBase<TOld, TNew>> migrations);
     }
 }

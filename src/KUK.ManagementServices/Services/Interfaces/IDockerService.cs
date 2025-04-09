@@ -1,4 +1,5 @@
-﻿using KUK.ManagementServices.Utilities;
+﻿using KUK.Common.Utilities;
+using KUK.ManagementServices.Utilities;
 
 namespace KUK.ManagementServices.Services.Interfaces
 {

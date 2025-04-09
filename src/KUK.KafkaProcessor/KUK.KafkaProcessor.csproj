@@ -1,19 +1,16 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+	<OutputType>Library</OutputType>
   </PropertyGroup>
 
 	<PropertyGroup>
 		<AssemblyOriginatorKeyFile></AssemblyOriginatorKeyFile>
-		<InternalsVisibleTo> KUK.UnitTests </InternalsVisibleTo>
+		<InternalsVisibleTo> KUK.ChinookUnitTests </InternalsVisibleTo>
 	</PropertyGroup>
-
-	<ItemGroup>
-    <_ContentIncludedByDefault Remove="appsettings.Online.json" />
-  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Polly" Version="8.5.2" />
@@ -59,18 +56,6 @@
 		<None Update="appsettings.json">
 			<CopyToOutputDirectory>Always</CopyToOutputDirectory>
 		</None>
-	</ItemGroup>
-
-	<ItemGroup>
-		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
-			<_Parameter1>KUK.UnitTests</_Parameter1>
-		</AssemblyAttribute>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Content Update="appsettings.Docker.json">
-	    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-	  </Content>
 	</ItemGroup>
 
 </Project>

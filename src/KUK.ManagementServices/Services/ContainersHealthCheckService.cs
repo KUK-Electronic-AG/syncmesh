@@ -2,8 +2,9 @@
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using KUK.Common.Services;
+using KUK.Common.Utilities;
 using KUK.ManagementServices.Services.Interfaces;
-using KUK.ManagementServices.Utilities;
+using Microsoft.Extensions.Configuration;
 using MySql.Data.MySqlClient;
 using Npgsql;
 
@@ -14,12 +15,16 @@ namespace KUK.ManagementServices.Services
         private readonly DockerClient _dockerClient;
         private readonly HttpClient _httpClient;
         private readonly IUtilitiesService _utilitiesService;
+        private readonly IConfiguration _configuration;
 
-        public ContainersHealthCheckService(IUtilitiesService utilitiesService)
+        public ContainersHealthCheckService(
+            IUtilitiesService utilitiesService,
+            IConfiguration configuration)
         {
             _dockerClient = new DockerClientConfiguration(new Uri("npipe://./pipe/docker_engine")).CreateClient();
             _httpClient = new HttpClient();
             _utilitiesService = utilitiesService;
+            _configuration = configuration;
         }
 
         public async Task<ServiceActionStatus> WaitForContainersAsync(List<string> containerNames, TimeSpan timeout)
@@ -88,6 +93,12 @@ namespace KUK.ManagementServices.Services
             bool isMartenPostgresHealthy = false;
             bool isDebeziumHealthy = false;
 
+            var newDbNameFromConfiguration = _configuration["ConnectorDetails:DbNameNew"];
+            if (string.IsNullOrEmpty(newDbNameFromConfiguration))
+            {
+                throw new InvalidOperationException($"Value of ConnectorDetails:DbNameNew is null or empty in the appsettings");
+            }
+
             var startTime = DateTime.UtcNow;
             while (DateTime.UtcNow - startTime < timeout)
             {
@@ -100,7 +111,7 @@ namespace KUK.ManagementServices.Services
                     isKafkaConnectHealthy = await IsKafkaConnectHealthyAsync("http://localhost:8083/");
                     isControlCenterHealthy = await IsControlCenterHealthyAsync("http://localhost:9021/");
                     isMySql80Healthy = await IsMySqlHealthyAsync($"Server=localhost;Port=3308;User Id=root;Password={oldDatabaseRootPassword};");
-                    isDestinationPostgresHealthy = await IsPostgresHealthyAsync($"Host=localhost;Port=5440;Username=postgres;Password={newDatabaseRootPasswordEnvironmentVariable};Database=db_chinook2;");
+                    isDestinationPostgresHealthy = await IsPostgresHealthyAsync($"Host=localhost;Port=5440;Username=postgres;Password={newDatabaseRootPasswordEnvironmentVariable};Database={newDbNameFromConfiguration};");
                     isMartenPostgresHealthy = await IsPostgresHealthyAsync($"Host=localhost;Port=5441;Username={postgresMartenRootUserName};Password={postgresMartenRootPassword};Database={postgresMartenDatabaseName};");
                     isDebeziumHealthy = await IsDebeziumHealthyAsync("http://localhost:8084/");
 
